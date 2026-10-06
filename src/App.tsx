@@ -49,6 +49,15 @@ import {
 } from './weather';
 import { supabase } from './supabase';
 import { fetchUserSettings, syncToCloud } from './syncService';
+import {
+  acceptDuoInvitation,
+  createDuoInvitation,
+  DuoRelationship,
+  getDuoRelationship,
+  getPartnerCalendar,
+  PartnerCalendar,
+  unlinkDuo,
+} from './duoService';
 
 export interface LeaveItem {
   id: number;
@@ -207,6 +216,12 @@ export default function App() {
   const [profileCityInput, setProfileCityInput] = useState(profile.departureCity?.name.split(',')[0] ?? '');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [duoRelationship, setDuoRelationship] = useState<DuoRelationship | null>(null);
+  const [partnerCalendar, setPartnerCalendar] = useState<PartnerCalendar | null>(null);
+  const [duoInviteInput, setDuoInviteInput] = useState('');
+  const [duoBusy, setDuoBusy] = useState(false);
+  const [duoError, setDuoError] = useState<string | null>(null);
+  const [calendarViewMode, setCalendarViewMode] = useState<'mine' | 'partner' | 'duo'>('mine');
   const [weatherByCity, setWeatherByCity] = useState<Record<string, DailyWeather[]>>({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -375,6 +390,61 @@ export default function App() {
     setLeaves(nextLeaves);
   };
 
+  const refreshDuoData = useCallback(async () => {
+    const relationship = await getDuoRelationship();
+    setDuoRelationship(relationship);
+    if (relationship?.status === 'accepted') {
+      const calendar = await getPartnerCalendar();
+      setPartnerCalendar(calendar);
+      setDuoRelationship({
+        ...relationship,
+        partnerName: calendar.partnerName,
+        partnerAvatar: calendar.partnerAvatar,
+      });
+    } else {
+      setPartnerCalendar(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      setDuoRelationship(null);
+      setPartnerCalendar(null);
+      setDuoError(null);
+      setCalendarViewMode('mine');
+      return;
+    }
+
+    void (async () => {
+      try {
+        const relationship = await getDuoRelationship();
+        if (cancelled) return;
+        setDuoRelationship(relationship);
+        if (relationship?.status === 'accepted') {
+          const calendar = await getPartnerCalendar();
+          if (cancelled) return;
+          setPartnerCalendar(calendar);
+          setDuoRelationship({
+            ...relationship,
+            partnerName: calendar.partnerName,
+            partnerAvatar: calendar.partnerAvatar,
+          });
+        } else {
+          setPartnerCalendar(null);
+        }
+        setDuoError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setDuoError(error instanceof Error ? error.message : 'Impossible de charger le partage Duo.');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       navigator.vibrate(15);
@@ -506,7 +576,91 @@ export default function App() {
     setProfileNameInput(profile.name);
     setProfileCityInput(profile.departureCity?.name.split(',')[0] ?? '');
     setProfileError(null);
+    setDuoError(null);
     setIsAuthModalOpen(true);
+    if (user) {
+      void refreshDuoData().catch((error: unknown) => {
+        setDuoError(error instanceof Error ? error.message : 'Impossible de rafraîchir le partage Duo.');
+      });
+    }
+  };
+
+  const handleRefreshDuo = async () => {
+    setDuoBusy(true);
+    setDuoError(null);
+    try {
+      await refreshDuoData();
+      showToast('Calendrier Duo actualisé.');
+    } catch (error) {
+      setDuoError(error instanceof Error ? error.message : 'Impossible de rafraîchir le partage Duo.');
+    } finally {
+      setDuoBusy(false);
+    }
+  };
+
+  const handleCreateDuoInvitation = async () => {
+    if (!user) {
+      setDuoError('Connectez-vous pour créer un code de partage.');
+      return;
+    }
+    setDuoBusy(true);
+    setDuoError(null);
+    try {
+      await createDuoInvitation();
+      await refreshDuoData();
+      showToast('Code de partage créé.');
+    } catch (error) {
+      setDuoError(error instanceof Error ? error.message : 'Impossible de créer un code de partage.');
+    } finally {
+      setDuoBusy(false);
+    }
+  };
+
+  const handleAcceptDuoInvitation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) {
+      setDuoError('Connectez-vous pour rejoindre un partage Duo.');
+      return;
+    }
+    setDuoBusy(true);
+    setDuoError(null);
+    try {
+      await acceptDuoInvitation(duoInviteInput);
+      setDuoInviteInput('');
+      await refreshDuoData();
+      setCalendarViewMode('duo');
+      showToast('Calendrier Duo connecté.');
+    } catch (error) {
+      setDuoError(error instanceof Error ? error.message : 'Impossible de rejoindre ce partage.');
+    } finally {
+      setDuoBusy(false);
+    }
+  };
+
+  const handleUnlinkDuo = async () => {
+    if (!window.confirm('Délier les comptes ? Le calendrier partagé ne sera plus visible.')) return;
+    setDuoBusy(true);
+    setDuoError(null);
+    try {
+      await unlinkDuo();
+      setDuoRelationship(null);
+      setPartnerCalendar(null);
+      setCalendarViewMode('mine');
+      showToast('Partage Duo désactivé.');
+    } catch (error) {
+      setDuoError(error instanceof Error ? error.message : 'Impossible de désactiver le partage.');
+    } finally {
+      setDuoBusy(false);
+    }
+  };
+
+  const handleCopyDuoCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast('Code copié dans le presse-papiers.');
+    } catch {
+      setDuoError('Impossible de copier le code. Sélectionnez-le pour le copier manuellement.');
+    }
   };
 
   const openQuotaEditor = (target: 'cp' | 'rtt') => {
@@ -1182,14 +1336,56 @@ export default function App() {
           <section key={activeView} aria-label="Calendrier annuel" className="view-enter space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h1 className="text-xl font-extrabold text-slate-900">Mon calendrier</h1>
+                <h1 className="text-xl font-extrabold text-slate-900">
+                  {calendarViewMode === 'partner'
+                    ? `Calendrier de ${partnerCalendar?.partnerName ?? 'mon partenaire'}`
+                    : calendarViewMode === 'duo'
+                      ? 'Vue Duo / Superposée'
+                      : 'Mon calendrier'}
+                </h1>
                 <p className="mt-1 text-xs text-slate-500">
                   Période de validité · {formatShortDateFr(activeQuotaPeriod.start)} {activeQuotaPeriod.start.slice(0, 4)} – {formatShortDateFr(activeQuotaPeriod.end)} {activeQuotaPeriod.end.slice(0, 4)}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-[11px]">
+              <div className="flex flex-wrap items-center justify-end gap-3 text-[11px]">
+                <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 shadow-sm">
+                  Année
+                  <select
+                    aria-label="Année du calendrier"
+                    value={selectedYear}
+                    onChange={(event) => setSelectedYear(Number(event.target.value))}
+                    className="bg-transparent font-extrabold text-indigo-700 focus:outline-none"
+                  >
+                    {[new Date().getFullYear(), new Date().getFullYear() + 1].map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 shadow-sm">
+                  <span className="sr-only">Vue du calendrier</span>
+                  <select
+                    aria-label="Vue du calendrier"
+                    value={calendarViewMode}
+                    onChange={(event) => setCalendarViewMode(event.target.value as typeof calendarViewMode)}
+                    className="max-w-48 bg-transparent font-bold text-slate-700 focus:outline-none"
+                  >
+                    <option value="mine">Mon calendrier</option>
+                    <option value="partner" disabled={!partnerCalendar}>
+                      Calendrier de {partnerCalendar?.partnerName ?? 'mon partenaire'}
+                    </option>
+                    <option value="duo" disabled={!partnerCalendar}>Vue Duo / Superposée</option>
+                  </select>
+                </label>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />CP posé</span>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />RTT posé</span>
+                {partnerCalendar && (
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />{partnerCalendar.partnerName}</span>
+                )}
+                {partnerCalendar && (
+                  <span className="rounded-full bg-gradient-to-r from-emerald-50 to-fuchsia-50 px-2.5 py-1 font-bold text-fuchsia-700">
+                    🏖️ Repos partagé
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-300" />Férié</span>
               </div>
             </div>
@@ -1277,19 +1473,33 @@ export default function App() {
                       {month.cells.map((cell, index) => {
                         if (!cell) return <span key={`blank-${index}`} className="aspect-square" />;
                         const { dateStr, dayNumber, isWeekend } = cell;
-                        const dayLeaves = leaves.filter((item) => item.date === dateStr);
-                        const leave = dayLeaves[0];
+                        const myDayLeaves = leaves.filter((item) => item.date === dateStr);
+                        const partnerDayLeaves = partnerCalendar?.leaves.filter((item) => item.date === dateStr) ?? [];
+                        const isSharedRest = myDayLeaves.length > 0 && partnerDayLeaves.length > 0;
+                        const dayLeaves = calendarViewMode === 'partner'
+                          ? partnerDayLeaves
+                          : calendarViewMode === 'duo'
+                            ? [...myDayLeaves, ...partnerDayLeaves]
+                            : myDayLeaves;
+                        const leave = calendarViewMode === 'partner'
+                          ? partnerDayLeaves[0]
+                          : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? partnerDayLeaves[0] : undefined);
+                        const isPartnerOnly = calendarViewMode === 'partner' && Boolean(leave);
                         const holiday = holidays.get(dateStr);
                         const inPeriod = dateStr >= activeQuotaPeriod.start && dateStr <= activeQuotaPeriod.end;
                         const isPast = dateStr < todayStr;
                         const pastCanBeBooked = month.year === new Date().getFullYear();
-                        const disabled = !leave && (
+                        const disabled = calendarViewMode === 'partner' || (!myDayLeaves.length && (
                           !inPeriod ||
                           isWeekend ||
                           Boolean(holiday) ||
                           (isPast && !pastCanBeBooked)
-                        );
-                        const dayColor = leave
+                        ));
+                        const dayColor = isSharedRest
+                          ? 'bg-gradient-to-br from-emerald-500 to-fuchsia-500 text-white ring-2 ring-white shadow-sm'
+                          : isPartnerOnly
+                            ? 'bg-fuchsia-100 text-fuchsia-800 ring-1 ring-fuchsia-200'
+                            : leave
                           ? leave.type === 'CP'
                             ? 'bg-emerald-500 text-white'
                             : 'bg-indigo-600 text-white'
@@ -1303,9 +1513,14 @@ export default function App() {
                             key={dateStr}
                             type="button"
                             disabled={disabled}
-                            onClick={() => leave ? handleDeleteLeave(leave.id) : openModalWithDate(dateStr)}
-                            title={leave
-                              ? `${dayLeaves.map((item) => `${item.type}${item.halfDay ? ` demi-journée ${item.halfDay === 'morning' ? 'matin' : 'après-midi'}` : ''}`).join(' + ')} posé · toucher pour retirer`
+                            onClick={() => {
+                              if (calendarViewMode === 'partner') return;
+                              myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
+                            }}
+                            title={isSharedRest
+                              ? `Repos partagé avec ${partnerCalendar?.partnerName} 🏖️`
+                              : leave
+                                ? `${dayLeaves.map((item) => `${item.type}${item.halfDay ? ` demi-journée ${item.halfDay === 'morning' ? 'matin' : 'après-midi'}` : ''}`).join(' + ')} posé${isPartnerOnly ? ` par ${partnerCalendar?.partnerName}` : ''}${calendarViewMode !== 'partner' ? ' · toucher pour retirer' : ''}`
                               : holiday
                                 ? `${holiday.name} · jour férié`
                                 : !inPeriod
@@ -1313,9 +1528,17 @@ export default function App() {
                                   : isPast && !pastCanBeBooked
                                     ? 'Date passée'
                                     : 'Poser un jour off'}
-                            className={`calendar-day aspect-square rounded-lg text-[10px] font-bold transition disabled:cursor-default ${dayColor}`}
+                            className={`calendar-day relative aspect-square rounded-lg text-[10px] font-bold transition disabled:cursor-default ${dayColor}`}
                           >
                             {leave ? `${dayNumber} ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : dayNumber}
+                            {isSharedRest && (
+                              <span
+                                aria-label="Repos partagé"
+                                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-white px-0.5 text-[9px] shadow"
+                              >
+                                🏖️
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -1325,7 +1548,11 @@ export default function App() {
               })}
             </div>
             <p className="text-center text-[11px] text-slate-500">
-              Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.
+              {calendarViewMode === 'partner'
+                ? `Calendrier en lecture seule de ${partnerCalendar?.partnerName ?? 'votre partenaire'}.`
+                : calendarViewMode === 'duo'
+                  ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
+                  : 'Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.'}
             </p>
           </section>
         )}
@@ -2164,6 +2391,116 @@ export default function App() {
               <p className="text-[10px] leading-relaxed text-slate-500">
                 Nom, avatar et ville enregistrés sur cet appareil{user ? ' et dans les métadonnées de votre compte' : ''}. La météo est fournie par Open-Meteo, sans clé API.
               </p>
+            </section>
+
+            <section className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/50 p-3.5 space-y-3">
+              <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
+                <Home className="h-4 w-4 text-fuchsia-600" />
+                Partage / Duo
+              </h4>
+              {duoRelationship?.status === 'accepted' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 rounded-xl border border-fuchsia-100 bg-white p-3">
+                    <span className="text-2xl" aria-hidden="true">{duoRelationship.partnerAvatar}</span>
+                    <div>
+                      <p className="text-xs font-extrabold text-slate-800">
+                        Calendrier lié à {duoRelationship.partnerName}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">
+                        Les dates, types et demi-journées posés sont partagés. Soldes et libellés restent privés.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={duoBusy}
+                    onClick={() => void handleRefreshDuo()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-100 bg-white py-2 text-xs font-bold text-fuchsia-700 transition hover:bg-fuchsia-50 disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Actualiser le calendrier partagé
+                  </button>
+                  <button
+                    type="button"
+                    disabled={duoBusy}
+                    onClick={handleUnlinkDuo}
+                    className="w-full rounded-xl border border-red-200 bg-white py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Délier les comptes
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {!user && (
+                    <p className="rounded-xl bg-amber-50 p-2.5 text-[11px] font-semibold text-amber-800">
+                      Connectez-vous à votre compte pour créer ou rejoindre un partage.
+                    </p>
+                  )}
+                  {duoRelationship?.status === 'pending' && duoRelationship.inviteCode && (
+                    <div className="rounded-xl border border-fuchsia-100 bg-white p-3">
+                      <p className="text-[10px] font-semibold text-slate-500">Votre code d’invitation</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <code className="text-sm font-extrabold tracking-wide text-fuchsia-700">
+                          {duoRelationship.inviteCode}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyDuoCode(duoRelationship.inviteCode!)}
+                          aria-label="Copier le code d’invitation"
+                          className="rounded-lg bg-fuchsia-50 p-2 text-fuchsia-700 transition hover:bg-fuchsia-100"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Partagez ce code avec votre conjoint ou ami. Il pourra le saisir dans son compte.
+                      </p>
+                    </div>
+                  )}
+                  {!duoRelationship && (
+                    <button
+                      type="button"
+                      disabled={!user || duoBusy}
+                      onClick={() => void handleCreateDuoInvitation()}
+                      className="w-full rounded-xl bg-fuchsia-600 py-2.5 text-xs font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {duoBusy ? 'Création…' : 'Générer un code d’invitation'}
+                    </button>
+                  )}
+                  {user && (
+                    <form onSubmit={handleAcceptDuoInvitation} className="space-y-2">
+                      <label className="block text-[11px] font-semibold text-slate-600">
+                        Saisir le code reçu
+                        <input
+                          type="text"
+                          autoCapitalize="characters"
+                          maxLength={13}
+                          value={duoInviteInput}
+                          onChange={(event) => setDuoInviteInput(event.target.value.toUpperCase())}
+                          placeholder="JOURSOFF-88A2"
+                          disabled={duoBusy}
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm font-bold tracking-wide text-slate-800 placeholder:font-medium placeholder:tracking-normal"
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        disabled={duoBusy || !duoInviteInput.trim()}
+                        className="w-full rounded-xl border border-fuchsia-200 bg-white py-2.5 text-xs font-extrabold text-fuchsia-700 transition hover:bg-fuchsia-50 disabled:opacity-50"
+                      >
+                        {duoBusy ? 'Connexion…' : 'Rejoindre ce partage'}
+                      </button>
+                    </form>
+                  )}
+                  <p className="text-[10px] leading-relaxed text-slate-500">
+                    Le partage est révocable à tout moment. Aucun solde, email ou libellé de congé n’est transmis.
+                  </p>
+                </div>
+              )}
+              {duoError && (
+                <p role="alert" className="rounded-xl bg-red-50 p-2.5 text-[11px] font-semibold text-red-700">
+                  {duoError}
+                </p>
+              )}
             </section>
 
             <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-3">
