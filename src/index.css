@@ -6,8 +6,133 @@
   }
 
   .font-mono-tabular {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: inherit;
     font-variant-numeric: tabular-nums;
+  }
+
+  button,
+  a,
+  input,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .calendar-day {
+    transform: translateZ(0);
+  }
+
+  .calendar-day:not(:disabled):hover {
+    transform: translateY(-1px) scale(1.04);
+  }
+
+  .calendar-day:not(:disabled):active {
+    transform: scale(0.88);
+    transition-duration: 80ms;
+  }
+
+  .view-enter {
+    animation: view-enter 240ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  }
+
+  .toast-enter {
+    animation: toast-enter 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
   }
 }
 
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-theme='emerald'] .bg-indigo-600 { background-color: #059669; }
+[data-theme='emerald'] .hover\:bg-indigo-700:hover { background-color: #047857; }
+[data-theme='emerald'] .text-indigo-600,
+[data-theme='emerald'] .text-indigo-700 { color: #047857; }
+[data-theme='emerald'] .bg-indigo-50 { background-color: #ecfdf5; }
+[data-theme='emerald'] .border-indigo-200 { border-color: #a7f3d0; }
+
+[data-theme='pastel'] .bg-indigo-600 { background-color: #db7ca8; }
+[data-theme='pastel'] .hover\:bg-indigo-700:hover { background-color: #c76592; }
+[data-theme='pastel'] .text-indigo-600,
+[data-theme='pastel'] .text-indigo-700 { color: #bd5687; }
+[data-theme='pastel'] .bg-indigo-50 { background-color: #fff1f7; }
+[data-theme='pastel'] .border-indigo-200 { border-color: #f5c2d7; }
+[data-theme='pastel'] { background-color: #fff9fc; }
+
+[data-theme='cat'] .bg-indigo-600 { background-color: #a855a0; }
+[data-theme='cat'] .hover\:bg-indigo-700:hover { background-color: #933f8c; }
+[data-theme='cat'] .text-indigo-600,
+[data-theme='cat'] .text-indigo-700 { color: #933f8c; }
+[data-theme='cat'] .bg-indigo-50 { background-color: #fdf2fb; }
+[data-theme='cat'] .border-indigo-200 { border-color: #f0c5eb; }
+[data-theme='cat']::after {
+  content: '🐱';
+  position: fixed;
+  z-index: 1;
+  right: 1rem;
+  bottom: 5.5rem;
+  opacity: 0.08;
+  font-size: 3rem;
+  pointer-events: none;
+}
+
+[data-theme='dark'] {
+  color: #e2e8f0;
+  background-color: #0f172a;
+}
+[data-theme='dark'] .bg-slate-50,
+[data-theme='dark'] .bg-slate-100,
+[data-theme='dark'] .bg-slate-100\/70,
+[data-theme='dark'] .bg-slate-200\/60,
+[data-theme='dark'] .bg-slate-200\/70 { background-color: #1e293b; }
+[data-theme='dark'] .bg-white,
+[data-theme='dark'] .bg-white\/90,
+[data-theme='dark'] .bg-white\/95 { background-color: #172033; }
+[data-theme='dark'] .text-slate-900,
+[data-theme='dark'] .text-slate-800,
+[data-theme='dark'] .text-slate-700 { color: #e2e8f0; }
+[data-theme='dark'] .text-slate-600,
+[data-theme='dark'] .text-slate-500 { color: #a8b4c7; }
+[data-theme='dark'] .text-slate-400 { color: #7f8da3; }
+[data-theme='dark'] .border-slate-100,
+[data-theme='dark'] .border-slate-200,
+[data-theme='dark'] .border-slate-200\/80,
+[data-theme='dark'] .border-slate-200\/70 { border-color: #334155; }
+[data-theme='dark'] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+[data-theme='dark'] .bg-indigo-50 { background-color: #242b4a; }
+[data-theme='dark'] .bg-slate-900 { background-color: #020617; }
+[data-theme='dark'] .text-indigo-600,
+[data-theme='dark'] .text-indigo-700 { color: #a5b4fc; }
+[data-theme='dark'] .bg-indigo-600 { background-color: #4f46e5; }
+[data-theme='dark'] .hover\:bg-indigo-700:hover { background-color: #4338ca; }
+[data-theme='dark'] input,
+[data-theme='dark'] select { color: #e2e8f0; }
+[data-theme='dark'] option { background-color: #172033; }
