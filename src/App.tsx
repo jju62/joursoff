@@ -20,6 +20,7 @@ import {
   Loader2,
   Home,
   CalendarDays,
+  Share,
   UserRound,
   Palette,
   Type,
@@ -38,6 +39,8 @@ import {
 import { getBookableLeaveDates } from './leaveDates';
 import { STANDALONE_HTML_CODE } from './standaloneHtml';
 import { usePWAInstall } from './usePWAInstall';
+import { WeatherBadge } from './WeatherBadge';
+import { useWeather } from './useWeather';
 import { forecastMonthlyRttBalance } from './rttForecast';
 import {
   DailyWeather,
@@ -81,7 +84,7 @@ type UserProfile = {
 };
 
 const DEFAULT_PROFILE: UserProfile = {
-  name: 'Julien',
+  name: '',
   avatar: '👋',
   departureCity: null,
 };
@@ -97,6 +100,20 @@ type Quotas = {
   periodStart: string;
   periodEnd: string;
 };
+
+function getDefaultQuotas(): Quotas {
+  return {
+    cp: 25,
+    rtt: 10,
+    rttMode: 'fixed',
+    rttMonthly: 1,
+    rttCurrentBalance: 10,
+    rttBalanceDate: toLocalIsoDate(new Date()),
+    rttMax: 10,
+    periodStart: '01-01',
+    periodEnd: '12-31',
+  };
+}
 
 function getQuotaPeriod(referenceDate: string, periodStart: string, periodEnd: string) {
   const referenceMonthDay = referenceDate.slice(5);
@@ -127,84 +144,15 @@ type ToastState = {
 };
 
 export default function App() {
-  // Persisted leaves (compatible with original joursoff_data format)
-  const [leaves, setLeaves] = useState<LeaveItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {
-      // ignore parse errors
-    }
-    return [];
-  });
+  const [leaves, setLeaves] = useState<LeaveItem[]>([]);
   const leavesRef = React.useRef(leaves);
-
-  // Initial allowances (default 25 CP, 10 RTT)
-  const [quotas, setQuotas] = useState<Quotas>(() => {
-    try {
-      const saved = localStorage.getItem(QUOTA_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          rttMode: 'fixed',
-          rttMonthly: 1,
-          rttCurrentBalance: Number(parsed.rtt ?? 10),
-          rttBalanceDate: toLocalIsoDate(new Date()),
-          rttMax: 10,
-          periodStart: '01-01',
-          periodEnd: '12-31',
-          ...parsed,
-        };
-      }
-    } catch {
-      // ignore
-    }
-    return {
-      cp: 25,
-      rtt: 10,
-      rttMode: 'fixed',
-      rttMonthly: 1,
-      rttCurrentBalance: 10,
-      rttBalanceDate: toLocalIsoDate(new Date()),
-      rttMax: 10,
-      periodStart: '01-01',
-      periodEnd: '12-31',
-    };
-  });
-  const [personalization, setPersonalization] = useState<Personalization>(() => {
-    try {
-      const saved = localStorage.getItem(PERSONALIZATION_STORAGE_KEY);
-      if (saved) return { theme: 'indigo', font: 'jakarta', ...JSON.parse(saved) };
-    } catch {
-      // ignore
-    }
-    return { theme: 'indigo', font: 'jakarta' };
-  });
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    try {
-      const saved = localStorage.getItem(PROFILE_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const legacyDefaultCity = parsed.departureCity?.name === 'Paris, France' &&
-          parsed.departureCity?.latitude === 48.8566 &&
-          parsed.departureCity?.longitude === 2.3522;
-        return {
-          ...DEFAULT_PROFILE,
-          ...parsed,
-          departureCity: legacyDefaultCity ? null : parsed.departureCity ?? null,
-        };
-      }
-    } catch {
-      // ignore malformed local profile
-    }
-    return DEFAULT_PROFILE;
-  });
+  const [quotas, setQuotas] = useState<Quotas>(getDefaultQuotas);
+  const [personalization, setPersonalization] = useState<Personalization>({ theme: 'indigo', font: 'jakarta' });
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
   // Supabase Auth State
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [authInitializing, setAuthInitializing] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -230,6 +178,7 @@ export default function App() {
   const [copiedCode, setCopiedCode] = useState(false);
   // Guard : empêche la double-sync (INITIAL_SESSION + SIGNED_IN)
   const hasSyncedRef = React.useRef(false);
+  const activeUserIdRef = React.useRef<string | null>(null);
 
   // UI state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -251,8 +200,8 @@ export default function App() {
   const [quotaPeriodStartInput, setQuotaPeriodStartInput] = useState(initialQuotaPeriod.start);
   const [quotaPeriodEndInput, setQuotaPeriodEndInput] = useState(initialQuotaPeriod.end);
 
-  const [isIOSGuideOpen, setIsIOSGuideOpen] = useState(false);
   const [activeBridgeFilter, setActiveBridgeFilter] = useState<'prioritaires' | 'tous'>('prioritaires');
+  const { forecasts: weatherForecasts, error: calendarWeatherError } = useWeather();
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [activeView, setActiveView] = useState<'calendar' | 'optimizer' | 'holidays'>('calendar');
   const [oneClickType, setOneClickType] = useState<'RTT' | 'CP'>('RTT');
@@ -261,6 +210,7 @@ export default function App() {
 
   const [leftViewMode, setLeftViewMode] = useState<'calendrier' | 'liste'>('calendrier');
   const [calendarMonthIndex, setCalendarMonthIndex] = useState<number>(new Date().getMonth());
+  const currentCalendarDayRef = React.useRef<HTMLButtonElement | null>(null);
 
   // Form state for manual leave modal
   const [formType, setFormType] = useState<'CP' | 'RTT'>('CP');
@@ -270,7 +220,23 @@ export default function App() {
   const [formLabel, setFormLabel] = useState<string>('');
 
   // PWA install hook
-  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOSSafari, install } = usePWAInstall();
+
+  const clearLocalAccountData = useCallback(() => {
+    leavesRef.current = [];
+    setLeaves([]);
+    setQuotas(getDefaultQuotas());
+    setPersonalization({ theme: 'indigo', font: 'jakarta' });
+    setProfile(DEFAULT_PROFILE);
+    setProfileNameInput(DEFAULT_PROFILE.name);
+    setProfileCityInput('');
+    setCalendarViewMode('mine');
+    setDuoRelationship(null);
+    setPartnerCalendar(null);
+    for (const key of [STORAGE_KEY, QUOTA_STORAGE_KEY, PERSONALIZATION_STORAGE_KEY, PROFILE_STORAGE_KEY]) {
+      localStorage.removeItem(key);
+    }
+  }, []);
 
   // Sync depuis le cloud (une seule fois par session grâce au ref)
   const syncFromCloud = useCallback(async (userId: string, force = false) => {
@@ -279,31 +245,19 @@ export default function App() {
     setIsSyncing(true);
     try {
       const { leaves: cloudLeaves, quotas: cloudQuotas } = await fetchUserSettings(userId);
-      let hasCloudLeaves = false;
-      if (cloudLeaves && cloudLeaves.length > 0) {
-        leavesRef.current = cloudLeaves;
-        setLeaves(cloudLeaves);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudLeaves));
-        hasCloudLeaves = true;
-      }
+      if (activeUserIdRef.current !== userId) return;
+      const accountLeaves = cloudLeaves ?? [];
+      leavesRef.current = accountLeaves;
+      setLeaves(accountLeaves);
       if (cloudQuotas) {
         setQuotas((current) => ({ ...current, ...cloudQuotas }));
-        localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(cloudQuotas));
-      }
-      // Si le cloud est vide mais qu'on a des données locales → première poussée
-      if (!hasCloudLeaves) {
-        const savedLeavesStr = localStorage.getItem(STORAGE_KEY);
-        const savedQuotasStr = localStorage.getItem(QUOTA_STORAGE_KEY);
-        const localLeaves = savedLeavesStr ? JSON.parse(savedLeavesStr) : [];
-        const localQuotas = savedQuotasStr ? JSON.parse(savedQuotasStr) : { cp: 25, rtt: 10 };
-        if (Array.isArray(localLeaves) && localLeaves.length > 0) {
-          await syncToCloud(localLeaves, localQuotas);
-        }
+      } else {
+        setQuotas(getDefaultQuotas());
       }
     } catch (e) {
       console.error('Erreur syncFromCloud:', e);
     } finally {
-      setIsSyncing(false);
+      if (activeUserIdRef.current === userId) setIsSyncing(false);
     }
   }, []);
 
@@ -311,52 +265,82 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        syncFromCloud(currentUser.id);
-      }
-    });
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+      if (event === 'INITIAL_SESSION') return;
       const currentUser = session?.user ?? null;
+      activeUserIdRef.current = currentUser?.id ?? null;
       setUser(currentUser);
-      // SIGNED_IN seulement (pas INITIAL_SESSION qui est déjà géré par getSession ci-dessus)
       if (event === 'SIGNED_IN' && currentUser) {
+        setIsAuthModalOpen(false);
         syncFromCloud(currentUser.id);
       }
       if (event === 'SIGNED_OUT') {
         hasSyncedRef.current = false;
+        clearLocalAccountData();
+        setIsAuthModalOpen(true);
       }
+    });
+
+    void supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!mounted) return;
+      if (error) {
+        setAuthError(`Impossible de vérifier la session : ${error.message}`);
+        setUser(null);
+        activeUserIdRef.current = null;
+        clearLocalAccountData();
+        setIsAuthModalOpen(true);
+      } else {
+        const currentUser = session?.user ?? null;
+        activeUserIdRef.current = currentUser?.id ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          setIsAuthModalOpen(false);
+          syncFromCloud(currentUser.id);
+        } else {
+          clearLocalAccountData();
+          setIsAuthModalOpen(true);
+        }
+      }
+      setAuthInitializing(false);
+    }).catch((error: unknown) => {
+      if (!mounted) return;
+      setAuthError(`Impossible de vérifier la session : ${error instanceof Error ? error.message : 'Erreur inconnue.'}`);
+      activeUserIdRef.current = null;
+      setUser(null);
+      clearLocalAccountData();
+      setIsAuthModalOpen(true);
+      setAuthInitializing(false);
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [syncFromCloud]);
+  }, [clearLocalAccountData, syncFromCloud]);
 
-  // Persist to localStorage (offline fallback)
+  // Persist only while an account is signed in.
   useEffect(() => {
+    if (!user) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(leaves));
-  }, [leaves]);
+  }, [leaves, user]);
 
   useEffect(() => {
+    if (!user) return;
     localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quotas));
-  }, [quotas]);
+  }, [quotas, user]);
 
   useEffect(() => {
+    if (!user) return;
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(personalization));
-  }, [personalization]);
+  }, [personalization, user]);
 
   useEffect(() => {
+    if (!user) return;
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-  }, [profile]);
+  }, [profile, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -480,17 +464,14 @@ export default function App() {
         setIsAuthModalOpen(false);
         showToast('Connexion réussie ! Vos données sont synchronisées.');
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
         });
         if (error) throw error;
-        setAuthSuccess(
-          'Compte créé avec succès ! Si la confirmation par email est activée, veuillez vérifier votre boîte de réception.'
-        );
-        setTimeout(() => {
-          setIsAuthModalOpen(false);
-        }, 2000);
+        setAuthSuccess(data.session
+          ? 'Compte créé avec succès.'
+          : 'Compte créé. Confirmez votre adresse email pour pouvoir vous connecter.');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erreur d'authentification";
@@ -500,11 +481,36 @@ export default function App() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthSubmitting(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Connexion Google impossible.');
+      setAuthSubmitting(false);
+    }
+  };
+
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAuthModalOpen(false);
-    showToast('Déconnecté. Vous êtes repassé en mode local.');
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setAuthError(`Déconnexion impossible : ${error.message}`);
+        return;
+      }
+      activeUserIdRef.current = null;
+      setUser(null);
+      clearLocalAccountData();
+      setIsAuthModalOpen(true);
+    } catch (error) {
+      setAuthError(`Déconnexion impossible : ${error instanceof Error ? error.message : 'Erreur inconnue.'}`);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -723,6 +729,11 @@ export default function App() {
   };
 
   const todayStr = toLocalIsoDate(new Date());
+  const weatherForecastEndDate = (() => {
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 6);
+    return toLocalIsoDate(endDate);
+  })();
   const activeQuotaPeriod = useMemo(
     () => getQuotaPeriod(todayStr, quotas.periodStart, quotas.periodEnd),
     [todayStr, quotas.periodStart, quotas.periodEnd]
@@ -1142,8 +1153,6 @@ export default function App() {
   };
 
   const formatFrNumber = (n: number) => n.toFixed(2).replace(/\.?0+$/, '').replace('.', ',');
-  const greetingName = profile.name;
-
   const MONTH_NAMES_FR = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -1188,6 +1197,18 @@ export default function App() {
     return months;
   }, [activeQuotaPeriod]);
 
+  useEffect(() => {
+    if (activeView !== 'calendar') return;
+    const timeout = window.setTimeout(() => {
+      currentCalendarDayRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      });
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [activeView, calendarMonths]);
+
   const calendarCells = useMemo(() => {
     const year = selectedYear;
     const firstDay = new Date(year, calendarMonthIndex, 1);
@@ -1214,6 +1235,17 @@ export default function App() {
     { value: 'cat', label: 'Chat 🐱', icon: Cat },
   ];
 
+  if (authInitializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+          Vérification de votre compte…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-theme={personalization.theme}
@@ -1233,20 +1265,23 @@ export default function App() {
             <a href="#top" className="text-lg font-extrabold tracking-tight text-emerald-700">
               JoursOff
             </a>
-            <p className="truncate text-xs text-slate-500">
-              Bonjour {greetingName} 👋
-            </p>
+            {user && profile.name.trim() && (
+              <p className="truncate text-xs text-slate-500">
+                Bonjour {profile.name.trim()} 👋
+              </p>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {!isInstalled && isInstallable && (
             <button
-              onClick={install}
-              aria-label="Installer l’application"
-              className="hidden sm:flex p-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+              type="button"
+              onClick={() => void install()}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
             >
-              <Smartphone className="w-4 h-4 text-indigo-600" />
+              <Download className="h-4 w-4" />
+              <span>Installer l&apos;app</span>
             </button>
           )}
           <button
@@ -1309,6 +1344,15 @@ export default function App() {
       )}
 
       <main id="top" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-5 sm:py-8 pb-24 sm:pb-8">
+        {isIOSSafari && (
+          <aside className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-emerald-900">
+            <Share className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+            <p>
+              Pour installer : appuyez sur <strong>Partager ⎋</strong> puis{' '}
+              <strong>« Sur l’écran d’accueil »</strong>.
+            </p>
+          </aside>
+        )}
         <nav aria-label="Vues principales" className="hidden sm:flex gap-2 mb-5">
           {[
             { id: 'calendar', label: 'Calendrier', icon: CalendarDays },
@@ -1465,7 +1509,10 @@ export default function App() {
                   getFrenchHolidays(month.year).map((holiday) => [holiday.date, holiday])
                 );
                 return (
-                  <article key={`${month.year}-${month.monthIndex}`} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
+                  <article
+                    key={`${month.year}-${month.monthIndex}`}
+                    className="scroll-mt-20 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm"
+                  >
                     <h2 className="mb-2 text-sm font-extrabold text-slate-800">{month.label}</h2>
                     <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-slate-400">
                       {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => (
@@ -1489,6 +1536,10 @@ export default function App() {
                           : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? partnerDayLeaves[0] : undefined);
                         const isPartnerOnly = calendarViewMode === 'partner' && Boolean(leave);
                         const holiday = holidays.get(dateStr);
+                        const isToday = dateStr === todayStr;
+                        const isWithinWeatherForecast =
+                          dateStr >= todayStr && dateStr <= weatherForecastEndDate;
+                        const forecast = isWithinWeatherForecast ? weatherForecasts[dateStr] : undefined;
                         const inPeriod = dateStr >= activeQuotaPeriod.start && dateStr <= activeQuotaPeriod.end;
                         const isPast = dateStr < todayStr;
                         const pastCanBeBooked = month.year === new Date().getFullYear();
@@ -1515,7 +1566,9 @@ export default function App() {
                           <button
                             key={dateStr}
                             type="button"
+                            ref={isToday ? currentCalendarDayRef : undefined}
                             disabled={disabled}
+                            aria-current={isToday ? 'date' : undefined}
                             onClick={() => {
                               if (calendarViewMode === 'partner') return;
                               myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
@@ -1531,9 +1584,15 @@ export default function App() {
                                   : isPast && !pastCanBeBooked
                                     ? 'Date passée'
                                     : 'Poser un jour off'}
-                            className={`calendar-day relative aspect-square rounded-lg text-[10px] font-bold transition disabled:cursor-default ${dayColor}`}
+                            className={`calendar-day relative aspect-square rounded-lg text-[10px] font-bold transition disabled:cursor-default ${dayColor} ${isToday ? '!ring-2 !ring-emerald-500 ring-offset-2' : ''}`}
                           >
                             {leave ? `${dayNumber} ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : dayNumber}
+                            {forecast && (
+                              <WeatherBadge
+                                code={forecast.code}
+                                maximumTemperature={forecast.maximumTemperature}
+                              />
+                            )}
                             {isSharedRest && (
                               <span
                                 aria-label="Repos partagé"
@@ -1557,6 +1616,11 @@ export default function App() {
                   ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
                   : 'Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.'}
             </p>
+            {calendarWeatherError && (
+              <p role="status" className="text-center text-[11px] text-slate-400">
+                {calendarWeatherError}
+              </p>
+            )}
           </section>
         )}
 
@@ -2222,13 +2286,26 @@ export default function App() {
 
             {/* Section : Analyse complète des 11 jours fériés français 2026 */}
             <section key={`holidays-${activeView}`} id="calendrier" className={`bg-white rounded-2xl border border-slate-200/80 p-5 ${activeView === 'holidays' ? 'view-enter' : 'hidden'}`}>
-              <div className="flex items-center justify-between mb-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-indigo-600" />
                     Jours fériés {selectedYear}
                   </h2>
                 </div>
+                <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 shadow-sm">
+                  Année
+                  <select
+                    aria-label="Année des jours fériés"
+                    value={selectedYear}
+                    onChange={(event) => setSelectedYear(Number(event.target.value))}
+                    className="bg-transparent font-extrabold text-indigo-700 focus:outline-none"
+                  >
+                    {[new Date().getFullYear(), new Date().getFullYear() + 1].map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="divide-y divide-slate-100">
@@ -2306,25 +2383,32 @@ export default function App() {
       </nav>
 
       {/* Modal: Connexion / Inscription Supabase */}
-      {isAuthModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 z-50">
+      {(isAuthModalOpen || !user) && (
+        <div
+          className={`fixed inset-0 z-50 flex justify-center p-4 ${user ? 'items-end bg-slate-900/40 backdrop-blur-xs sm:items-center' : 'items-center overflow-y-auto bg-white'}`}
+        >
           <div className="bg-white w-full max-w-sm max-h-[90dvh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-100 space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Cloud className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-extrabold text-slate-900 text-lg">
-                  {user ? 'Mon compte' : 'Connexion Cloud'}
+                  {user ? 'Mon compte' : 'Bienvenue sur JoursOff'}
                 </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsAuthModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(false)}
+                  aria-label="Fermer"
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
+            {user && (
+            <>
             <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
                 <UserRound className="h-4 w-4 text-indigo-600" />
@@ -2549,6 +2633,8 @@ export default function App() {
                 </select>
               </label>
             </section>
+            </>
+            )}
 
             {user ? (
               <div className="space-y-4">
@@ -2583,7 +2669,10 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleAuthSubmit} className="space-y-3.5">
+              <div className="space-y-3.5">
+                <p className="text-xs leading-relaxed text-slate-600">
+                  Connectez-vous ou créez un compte pour accéder à votre calendrier et retrouver vos données sur vos appareils.
+                </p>
                 <div className="flex p-1 bg-slate-100 rounded-xl text-xs font-bold">
                   <button
                     type="button"
@@ -2617,6 +2706,23 @@ export default function App() {
                   </button>
                 </div>
 
+                <button
+                  type="button"
+                  disabled={authSubmitting}
+                  onClick={() => void handleGoogleSignIn()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <span aria-hidden="true" className="text-base font-extrabold text-blue-600">G</span>
+                  Continuer avec Google
+                </button>
+
+                <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="h-px flex-1 bg-slate-200" />
+                  ou par email
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                <form onSubmit={handleAuthSubmit} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Adresse email
@@ -2674,11 +2780,8 @@ export default function App() {
                     <span>Créer mon compte</span>
                   )}
                 </button>
-
-                <p className="text-[11px] text-slate-400 text-center">
-                  En mode déconnecté, vos données restent stockées localement dans votre navigateur (localStorage).
-                </p>
-              </form>
+                </form>
+              </div>
             )}
           </div>
         </div>
@@ -3100,28 +3203,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal: Guide d'installation iOS Safari */}
-      {isIOSGuideOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
-            <h3 className="text-base font-extrabold text-slate-900">
-              Installer JoursOff sur iPhone / iPad
-            </h3>
-            <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-              1. Appuyez sur le bouton <strong>Partager</strong> dans la barre de Safari.
-              <br />
-              2. Faites défiler et appuyez sur <strong>Sur l&apos;écran d&apos;accueil</strong>.
-            </p>
-            <button
-              type="button"
-              onClick={() => setIsIOSGuideOpen(false)}
-              className="mt-4 w-full rounded-xl bg-slate-100 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-200 cursor-pointer"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
