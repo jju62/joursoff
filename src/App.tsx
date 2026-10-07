@@ -1227,13 +1227,16 @@ export default function App() {
       className="min-h-screen bg-slate-50 text-slate-900 flex flex-col"
     >
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 min-h-16 flex items-center justify-between gap-3 shadow-xs">
-        <div className="min-w-0">
-          <a href="#top" className="text-lg font-extrabold tracking-tight text-indigo-600">
-            JoursOff
-          </a>
-          <p className="text-xs text-slate-500 truncate">
-            Bonjour {greetingName} 👋
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <img src="/icon-192.png" alt="Fly Calendar Logo" className="w-10 h-10 rounded-2xl shadow-md shadow-emerald-500/20 object-cover" />
+          <div className="min-w-0">
+            <a href="#top" className="text-lg font-extrabold tracking-tight text-emerald-700">
+              JoursOff
+            </a>
+            <p className="truncate text-xs text-slate-500">
+              Bonjour {greetingName} 👋
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

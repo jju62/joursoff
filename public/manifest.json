@@ -1,15 +1,15 @@
 {
     "short_name": "JoursOff",
-    "name": "JoursOff - Optimiseur de Congés",
+    "name": "JoursOff — Fly Calendar",
     "icons": [
         {
-            "src": "/icon.png",
+            "src": "/icon-192.png",
             "type": "image/png",
             "sizes": "192x192",
             "purpose": "any maskable"
         },
         {
-            "src": "/icon.png",
+            "src": "/icon-512.png",
             "type": "image/png",
             "sizes": "512x512",
             "purpose": "any maskable"
@@ -17,6 +17,6 @@
     ],
     "start_url": "/",
     "background_color": "#ffffff",
-    "theme_color": "#000000",
+    "theme_color": "#10b981",
     "display": "standalone"
 }
