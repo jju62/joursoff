@@ -780,10 +780,6 @@ export default function App() {
   };
 
   const handleRefreshDuo = async () => {
-    if (!isPro) {
-      setDuoError('La synchronisation Duo est réservée aux comptes Pro. La consultation du calendrier partagé reste gratuite.');
-      return;
-    }
     setDuoBusy(true);
     setDuoError(null);
     try {
@@ -1910,7 +1906,6 @@ export default function App() {
                         const disabled =
                           calendarViewMode === 'partner' ||
                           calendarViewMode === 'group' ||
-                          (calendarViewMode === 'duo' && !isPro) ||
                           (!myDayLeaves.length && (
                           !inPeriod ||
                           isWeekend ||
@@ -1940,8 +1935,7 @@ export default function App() {
                             onClick={() => {
                               if (
                                 calendarViewMode === 'partner' ||
-                                calendarViewMode === 'group' ||
-                                (calendarViewMode === 'duo' && !isPro)
+                                calendarViewMode === 'group'
                               ) return;
                               myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
                             }}
@@ -1949,8 +1943,6 @@ export default function App() {
                               ? `Repos partagé avec ${partnerCalendar?.partnerName} 🏖️`
                               : calendarViewMode === 'group'
                                 ? groupDayLeaves.map((item) => `${item.memberName} · ${item.type}`).join(', ') || `Groupe ${groupCalendar?.name ?? ''} · lecture seule`
-                              : calendarViewMode === 'duo' && !isPro
-                                ? 'Vue Duo en lecture seule · édition réservée à Pro'
                               : leave
                                 ? `${dayLeaves.map((item) => `${item.type}${item.halfDay ? ` demi-journée ${item.halfDay === 'morning' ? 'matin' : 'après-midi'}` : ''}`).join(' + ')} posé${isPartnerOnly ? ` par ${partnerCalendar?.partnerName}` : ''}${calendarViewMode !== 'partner' ? ' · toucher pour retirer' : ''}`
                               : holiday
@@ -1992,9 +1984,7 @@ export default function App() {
                 : calendarViewMode === 'group'
                   ? `Calendrier du groupe ${groupCalendar?.name ?? ''} · lecture seule. Cochez les membres à afficher.`
                 : calendarViewMode === 'duo'
-                  ? isPro
-                    ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
-                    : '🏖️ Consultation Duo gratuite en lecture seule. L’édition et la synchronisation sont réservées à Pro.'
+                  ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
                   : 'Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.'}
             </p>
             {calendarWeatherError && (
@@ -2920,18 +2910,13 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    disabled={duoBusy || !isPro}
+                    disabled={duoBusy}
                     onClick={() => void handleRefreshDuo()}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-100 bg-white py-2 text-xs font-bold text-fuchsia-700 transition hover:bg-fuchsia-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    {isPro ? 'Actualiser le calendrier partagé' : 'Synchronisation réservée à Pro'}
+                    Actualiser le calendrier partagé
                   </button>
-                  {!isPro && (
-                    <p className="text-[10px] text-fuchsia-800">
-                      La consultation reste gratuite. Passez Pro pour synchroniser et modifier la vue Duo.
-                    </p>
-                  )}
                   <button
                     type="button"
                     disabled={duoBusy}

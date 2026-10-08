@@ -51,8 +51,9 @@ Le compte Pro reçoit les prévisions jusqu’à J+7, trois suggestions filtrabl
 normales climatiques mensuelles calculées à partir des archives Open-Meteo (1991–2020).
 Les thèmes Indigo et Émeraude sont gratuits ; OLED, Pastel et Saisonnier sont réservés
 à Pro.
-La consultation du calendrier Duo est gratuite ; son actualisation et l’édition de la
-vue partagée sont réservées à Pro.
+Le partage Duo est gratuit : consultation, actualisation et édition de son propre
+calendrier depuis la vue superposée. Les groupes de plus de deux personnes sont
+réservés à Pro.
 
 ## Statut Pro
 
