@@ -11,47 +11,6 @@ export interface DailyWeather {
   precipitationProbability: number;
 }
 
-export const SUGGESTED_DESTINATIONS: (WeatherLocation & {
-  activities: { dry: string; rainy: string };
-})[] = [
-  {
-    name: 'Bordeaux',
-    latitude: 44.8378,
-    longitude: -0.5792,
-    activities: {
-      dry: 'Balade sur les quais, vélo dans les vignes et visite de Saint-Émilion.',
-      rainy: 'Cité du Vin, Bassins des Lumières et dégustation à l’abri.',
-    },
-  },
-  {
-    name: 'Lyon',
-    latitude: 45.764,
-    longitude: 4.8357,
-    activities: {
-      dry: 'Vieux Lyon, traboules, Fourvière et pique-nique au parc de la Tête d’Or.',
-      rainy: 'Musée des Confluences, Halles Paul Bocuse et pause gourmande.',
-    },
-  },
-  {
-    name: 'Marseille',
-    latitude: 43.2965,
-    longitude: 5.3698,
-    activities: {
-      dry: 'Vieux-Port, balade en bord de mer et calanques si les conditions le permettent.',
-      rainy: 'MUCEM, quartier du Panier et découverte des spécialités locales.',
-    },
-  },
-  {
-    name: 'Strasbourg',
-    latitude: 48.5734,
-    longitude: 7.7521,
-    activities: {
-      dry: 'Petite France à pied, vélo le long de l’Ill et excursion en Alsace.',
-      rainy: 'Cathédrale, musées du centre et winstub.',
-    },
-  },
-];
-
 export function weatherDescription(code: number) {
   if (code === 0) return { label: 'Ensoleillé', icon: '☀️' };
   if (code <= 2) return { label: 'Éclaircies', icon: '🌤️' };
@@ -86,13 +45,14 @@ export async function geocodeCity(city: string, signal?: AbortSignal): Promise<W
 
 export async function fetchDailyWeather(
   location: WeatherLocation,
-  signal?: AbortSignal
+  signal: AbortSignal | undefined,
+  forecastDays: number
 ): Promise<DailyWeather[]> {
   const params = new URLSearchParams({
     latitude: String(location.latitude),
     longitude: String(location.longitude),
     daily: 'weather_code,temperature_2m_max,precipitation_probability_max',
-    forecast_days: '16',
+    forecast_days: String(forecastDays),
     timezone: 'auto',
   });
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal });
@@ -105,11 +65,22 @@ export async function fetchDailyWeather(
       precipitation_probability_max: number[];
     };
   };
-  if (!result.daily) throw new Error(`Prévisions incomplètes pour ${location.name}.`);
-  return result.daily.time.map((date, index) => ({
+  const daily = result.daily;
+  if (
+    !daily?.time ||
+    !daily.weather_code ||
+    !daily.temperature_2m_max ||
+    !daily.precipitation_probability_max ||
+    daily.time.length !== daily.weather_code.length ||
+    daily.time.length !== daily.temperature_2m_max.length ||
+    daily.time.length !== daily.precipitation_probability_max.length
+  ) {
+    throw new Error(`Prévisions incomplètes pour ${location.name}.`);
+  }
+  return daily.time.map((date, index) => ({
     date,
-    code: result.daily!.weather_code[index],
-    maximumTemperature: result.daily!.temperature_2m_max[index],
-    precipitationProbability: result.daily!.precipitation_probability_max[index],
+    code: daily.weather_code[index],
+    maximumTemperature: daily.temperature_2m_max[index],
+    precipitationProbability: daily.precipitation_probability_max[index],
   }));
 }

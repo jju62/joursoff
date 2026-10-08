@@ -87,23 +87,6 @@
 [data-theme='pastel'] .border-indigo-200 { border-color: #f5c2d7; }
 [data-theme='pastel'] { background-color: #fff9fc; }
 
-[data-theme='cat'] .bg-indigo-600 { background-color: #a855a0; }
-[data-theme='cat'] .hover\:bg-indigo-700:hover { background-color: #933f8c; }
-[data-theme='cat'] .text-indigo-600,
-[data-theme='cat'] .text-indigo-700 { color: #933f8c; }
-[data-theme='cat'] .bg-indigo-50 { background-color: #fdf2fb; }
-[data-theme='cat'] .border-indigo-200 { border-color: #f0c5eb; }
-[data-theme='cat']::after {
-  content: '🐱';
-  position: fixed;
-  z-index: 1;
-  right: 1rem;
-  bottom: 5.5rem;
-  opacity: 0.08;
-  font-size: 3rem;
-  pointer-events: none;
-}
-
 [data-theme='dark'] {
   color: #e2e8f0;
   background-color: #0f172a;
@@ -136,3 +119,42 @@
 [data-theme='dark'] input,
 [data-theme='dark'] select { color: #e2e8f0; }
 [data-theme='dark'] option { background-color: #172033; }
+
+[data-theme='oled'] {
+  color: #e2e8f0;
+  background-color: #000;
+}
+[data-theme='oled'] .bg-slate-50,
+[data-theme='oled'] .bg-slate-100,
+[data-theme='oled'] .bg-slate-100\/70,
+[data-theme='oled'] .bg-slate-200\/60,
+[data-theme='oled'] .bg-slate-200\/70 { background-color: #050505; }
+[data-theme='oled'] .bg-white,
+[data-theme='oled'] .bg-white\/90,
+[data-theme='oled'] .bg-white\/95 { background-color: #000; }
+[data-theme='oled'] .text-slate-900,
+[data-theme='oled'] .text-slate-800,
+[data-theme='oled'] .text-slate-700 { color: #e2e8f0; }
+[data-theme='oled'] .text-slate-600,
+[data-theme='oled'] .text-slate-500 { color: #a8b4c7; }
+[data-theme='oled'] .border-slate-100,
+[data-theme='oled'] .border-slate-200,
+[data-theme='oled'] .border-slate-200\/80,
+[data-theme='oled'] .border-slate-200\/70 { border-color: #262626; }
+[data-theme='oled'] .bg-indigo-50 { background-color: #111827; }
+[data-theme='oled'] .text-indigo-600,
+[data-theme='oled'] .text-indigo-700 { color: #a5b4fc; }
+[data-theme='oled'] .bg-indigo-600 { background-color: #4f46e5; }
+
+[data-theme='seasonal'][data-season='printemps'] .bg-indigo-600 { background-color: #16a34a; }
+[data-theme='seasonal'][data-season='printemps'] .text-indigo-600,
+[data-theme='seasonal'][data-season='printemps'] .text-indigo-700 { color: #15803d; }
+[data-theme='seasonal'][data-season='ete'] .bg-indigo-600 { background-color: #0284c7; }
+[data-theme='seasonal'][data-season='ete'] .text-indigo-600,
+[data-theme='seasonal'][data-season='ete'] .text-indigo-700 { color: #0369a1; }
+[data-theme='seasonal'][data-season='automne'] .bg-indigo-600 { background-color: #c2410c; }
+[data-theme='seasonal'][data-season='automne'] .text-indigo-600,
+[data-theme='seasonal'][data-season='automne'] .text-indigo-700 { color: #9a3412; }
+[data-theme='seasonal'][data-season='hiver'] .bg-indigo-600 { background-color: #4f46e5; }
+[data-theme='seasonal'][data-season='hiver'] .text-indigo-600,
+[data-theme='seasonal'][data-season='hiver'] .text-indigo-700 { color: #4338ca; }

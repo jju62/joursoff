@@ -19,13 +19,14 @@ const DEFAULT_LOCATION = {
 async function fetchForecast(
   latitude: number,
   longitude: number,
+  forecastDays: number,
   signal: AbortSignal
 ): Promise<DailyForecast[]> {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
     daily: 'weather_code,temperature_2m_max',
-    forecast_days: '7',
+    forecast_days: String(forecastDays),
     timezone: 'auto',
   });
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal });
@@ -53,16 +54,17 @@ async function fetchForecast(
   });
 }
 
-export function useWeather(): WeatherState {
+export function useWeather(forecastDays: number): WeatherState {
   const [state, setState] = useState<WeatherState>({ forecasts: {}, error: null });
 
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    setState({ forecasts: {}, error: null });
 
     const loadForecast = async (latitude: number, longitude: number) => {
       try {
-        const dailyForecasts = await fetchForecast(latitude, longitude, controller.signal);
+        const dailyForecasts = await fetchForecast(latitude, longitude, forecastDays, controller.signal);
         if (cancelled) return;
         setState({
           forecasts: Object.fromEntries(dailyForecasts.map((forecast) => [forecast.date, forecast])),
@@ -99,7 +101,7 @@ export function useWeather(): WeatherState {
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [forecastDays]);
 
   return state;
 }

@@ -24,11 +24,11 @@ import {
   UserRound,
   Palette,
   Type,
-  Cat,
   Leaf,
   Moon,
+  UsersRound,
+  Crown,
 } from 'lucide-react';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
 import {
   analyzeBridges2026,
   getFrenchHolidays,
@@ -40,13 +40,14 @@ import { getBookableLeaveDates } from './leaveDates';
 import { STANDALONE_HTML_CODE } from './standaloneHtml';
 import { usePWAInstall } from './usePWAInstall';
 import { WeatherBadge } from './WeatherBadge';
+import { AdBanner } from './AdBanner';
+import { EscapadesPanel } from './EscapadesPanel';
 import { useWeather } from './useWeather';
 import { forecastMonthlyRttBalance } from './rttForecast';
 import {
   DailyWeather,
   fetchDailyWeather,
   geocodeCity,
-  SUGGESTED_DESTINATIONS,
   weatherDescription,
   WeatherLocation,
 } from './weather';
@@ -61,6 +62,17 @@ import {
   PartnerCalendar,
   unlinkDuo,
 } from './duoService';
+import {
+  acceptCalendarGroupInvitation,
+  CalendarGroup,
+  createCalendarGroup,
+  createCalendarGroupInvitation,
+  getCalendarGroups,
+  getGroupCalendar,
+  GroupCalendar,
+} from './groupService';
+import { useAuth } from './context/AuthContext';
+import { ProTestAccessButton } from './ProTestAccessButton';
 
 export interface LeaveItem {
   id: number;
@@ -134,7 +146,7 @@ function toLocalIsoDate(date: Date) {
 }
 
 type Personalization = {
-  theme: 'indigo' | 'emerald' | 'pastel' | 'dark' | 'cat';
+  theme: 'indigo' | 'emerald' | 'oled' | 'pastel' | 'seasonal';
   font: 'jakarta' | 'system' | 'rounded';
 };
 
@@ -144,15 +156,13 @@ type ToastState = {
 };
 
 export default function App() {
+  const { user, isPro, setIsPro, loading: authInitializing } = useAuth();
   const [leaves, setLeaves] = useState<LeaveItem[]>([]);
   const leavesRef = React.useRef(leaves);
   const [quotas, setQuotas] = useState<Quotas>(getDefaultQuotas);
   const [personalization, setPersonalization] = useState<Personalization>({ theme: 'indigo', font: 'jakarta' });
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
-  // Supabase Auth State
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [authInitializing, setAuthInitializing] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -166,10 +176,19 @@ export default function App() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [duoRelationship, setDuoRelationship] = useState<DuoRelationship | null>(null);
   const [partnerCalendar, setPartnerCalendar] = useState<PartnerCalendar | null>(null);
+  const [calendarGroups, setCalendarGroups] = useState<CalendarGroup[]>([]);
+  const [groupCalendar, setGroupCalendar] = useState<GroupCalendar | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [visibleGroupMembers, setVisibleGroupMembers] = useState<Record<string, boolean>>({});
+  const [groupNameInput, setGroupNameInput] = useState('');
+  const [groupInviteInput, setGroupInviteInput] = useState('');
+  const [groupInviteCode, setGroupInviteCode] = useState('');
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
   const [duoInviteInput, setDuoInviteInput] = useState('');
   const [duoBusy, setDuoBusy] = useState(false);
   const [duoError, setDuoError] = useState<string | null>(null);
-  const [calendarViewMode, setCalendarViewMode] = useState<'mine' | 'partner' | 'duo'>('mine');
+  const [calendarViewMode, setCalendarViewMode] = useState<'mine' | 'partner' | 'duo' | 'group'>('mine');
   const [weatherByCity, setWeatherByCity] = useState<Record<string, DailyWeather[]>>({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -201,7 +220,8 @@ export default function App() {
   const [quotaPeriodEndInput, setQuotaPeriodEndInput] = useState(initialQuotaPeriod.end);
 
   const [activeBridgeFilter, setActiveBridgeFilter] = useState<'prioritaires' | 'tous'>('prioritaires');
-  const { forecasts: weatherForecasts, error: calendarWeatherError } = useWeather();
+  const weatherForecastDays = isPro ? 7 : 3;
+  const { forecasts: weatherForecasts, error: calendarWeatherError } = useWeather(weatherForecastDays + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [activeView, setActiveView] = useState<'calendar' | 'optimizer' | 'holidays'>('calendar');
   const [oneClickType, setOneClickType] = useState<'RTT' | 'CP'>('RTT');
@@ -211,6 +231,8 @@ export default function App() {
   const [leftViewMode, setLeftViewMode] = useState<'calendrier' | 'liste'>('calendrier');
   const [calendarMonthIndex, setCalendarMonthIndex] = useState<number>(new Date().getMonth());
   const currentCalendarDayRef = React.useRef<HTMLButtonElement | null>(null);
+  const currentCalendarMonthRef = React.useRef<HTMLElement | null>(null);
+  const calendarMonthsContainerRef = React.useRef<HTMLDivElement | null>(null);
 
   // Form state for manual leave modal
   const [formType, setFormType] = useState<'CP' | 'RTT'>('CP');
@@ -261,65 +283,19 @@ export default function App() {
     }
   }, []);
 
-  // Init auth session
+  // Load and clear account-specific data as the shared auth context changes.
   useEffect(() => {
-    let mounted = true;
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-      if (event === 'INITIAL_SESSION') return;
-      const currentUser = session?.user ?? null;
-      activeUserIdRef.current = currentUser?.id ?? null;
-      setUser(currentUser);
-      if (event === 'SIGNED_IN' && currentUser) {
-        setIsAuthModalOpen(false);
-        syncFromCloud(currentUser.id);
-      }
-      if (event === 'SIGNED_OUT') {
-        hasSyncedRef.current = false;
-        clearLocalAccountData();
-        setIsAuthModalOpen(true);
-      }
-    });
-
-    void supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (!mounted) return;
-      if (error) {
-        setAuthError(`Impossible de vérifier la session : ${error.message}`);
-        setUser(null);
-        activeUserIdRef.current = null;
-        clearLocalAccountData();
-        setIsAuthModalOpen(true);
-      } else {
-        const currentUser = session?.user ?? null;
-        activeUserIdRef.current = currentUser?.id ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-          setIsAuthModalOpen(false);
-          syncFromCloud(currentUser.id);
-        } else {
-          clearLocalAccountData();
-          setIsAuthModalOpen(true);
-        }
-      }
-      setAuthInitializing(false);
-    }).catch((error: unknown) => {
-      if (!mounted) return;
-      setAuthError(`Impossible de vérifier la session : ${error instanceof Error ? error.message : 'Erreur inconnue.'}`);
-      activeUserIdRef.current = null;
-      setUser(null);
+    if (authInitializing) return;
+    activeUserIdRef.current = user?.id ?? null;
+    if (user) {
+      setIsAuthModalOpen(false);
+      syncFromCloud(user.id);
+    } else {
+      hasSyncedRef.current = false;
       clearLocalAccountData();
       setIsAuthModalOpen(true);
-      setAuthInitializing(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [clearLocalAccountData, syncFromCloud]);
+    }
+  }, [authInitializing, clearLocalAccountData, syncFromCloud, user]);
 
   // Persist only while an account is signed in.
   useEffect(() => {
@@ -390,6 +366,13 @@ export default function App() {
     }
   }, []);
 
+  const refreshCalendarGroups = useCallback(async () => {
+    const groups = await getCalendarGroups();
+    setCalendarGroups(groups);
+    setGroupError(null);
+    return groups;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     if (!user) {
@@ -428,6 +411,66 @@ export default function App() {
       cancelled = true;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setCalendarGroups([]);
+      setGroupCalendar(null);
+      setSelectedGroupId('');
+      setGroupError(null);
+      return;
+    }
+    let cancelled = false;
+    void getCalendarGroups().then((groups) => {
+      if (!cancelled) {
+        setCalendarGroups(groups);
+        setGroupError(null);
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setGroupError(error instanceof Error ? error.message : 'Impossible de charger les groupes.');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!isPro && calendarViewMode === 'group') {
+      setCalendarViewMode('mine');
+      setGroupCalendar(null);
+      return;
+    }
+    if (!isPro || calendarViewMode !== 'group' || !selectedGroupId) return;
+    let cancelled = false;
+    setGroupCalendar(null);
+    void getGroupCalendar(selectedGroupId).then((calendar) => {
+      if (cancelled) return;
+      setGroupCalendar(calendar);
+      setVisibleGroupMembers((current) => {
+        const next = { ...current };
+        calendar.members.forEach((member) => {
+          if (next[member.id] === undefined) next[member.id] = true;
+        });
+        return next;
+      });
+      setGroupError(null);
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setGroupError(error instanceof Error ? error.message : 'Impossible de charger le calendrier du groupe.');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [calendarViewMode, isPro, selectedGroupId]);
+
+  useEffect(() => {
+    if (!isPro && ['oled', 'pastel', 'seasonal'].includes(personalization.theme)) {
+      setPersonalization((current) => ({ ...current, theme: 'indigo' }));
+    }
+  }, [personalization.theme, isPro]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -505,11 +548,21 @@ export default function App() {
         return;
       }
       activeUserIdRef.current = null;
-      setUser(null);
       clearLocalAccountData();
       setIsAuthModalOpen(true);
     } catch (error) {
       setAuthError(`Déconnexion impossible : ${error instanceof Error ? error.message : 'Erreur inconnue.'}`);
+    }
+  };
+
+  const handleSetProStatus = async (value: boolean) => {
+    try {
+      await setIsPro(value);
+      setProfileError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible de mettre à jour le statut Pro.';
+      setProfileError(message);
+      showToast(message);
     }
   };
 
@@ -592,6 +645,10 @@ export default function App() {
   };
 
   const handleRefreshDuo = async () => {
+    if (!isPro) {
+      setDuoError('La synchronisation Duo est réservée aux comptes Pro. La consultation du calendrier partagé reste gratuite.');
+      return;
+    }
     setDuoBusy(true);
     setDuoError(null);
     try {
@@ -669,6 +726,83 @@ export default function App() {
     }
   };
 
+  const handleCreateCalendarGroup = async () => {
+    if (!user) {
+      setGroupError('Connectez-vous pour créer un groupe.');
+      return;
+    }
+    if (!isPro) {
+      setGroupError('La création de groupes personnalisés est réservée à Pro.');
+      return;
+    }
+    setGroupBusy(true);
+    setGroupError(null);
+    try {
+      const group = await createCalendarGroup(groupNameInput);
+      await refreshCalendarGroups();
+      setGroupNameInput('');
+      setSelectedGroupId(group.id);
+      setCalendarViewMode('group');
+      showToast(`Groupe « ${group.name} » créé.`);
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : 'Impossible de créer le groupe.');
+    } finally {
+      setGroupBusy(false);
+    }
+  };
+
+  const handleCreateCalendarGroupInvitation = async () => {
+    if (!isPro || !selectedGroupId) {
+      setGroupError('Sélectionnez un groupe Pro pour créer un code d’invitation.');
+      return;
+    }
+    setGroupBusy(true);
+    setGroupError(null);
+    try {
+      setGroupInviteCode(await createCalendarGroupInvitation(selectedGroupId));
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : 'Impossible de créer le code d’invitation.');
+    } finally {
+      setGroupBusy(false);
+    }
+  };
+
+  const handleAcceptCalendarGroupInvitation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) {
+      setGroupError('Connectez-vous pour rejoindre un groupe.');
+      return;
+    }
+    if (!isPro) {
+      setGroupError('L’accès aux groupes personnalisés est réservé à Pro.');
+      return;
+    }
+    setGroupBusy(true);
+    setGroupError(null);
+    try {
+      const joinedGroupId = await acceptCalendarGroupInvitation(groupInviteInput);
+      setGroupInviteInput('');
+      await refreshCalendarGroups();
+      setSelectedGroupId(joinedGroupId);
+      setCalendarViewMode('group');
+      showToast('Groupe rejoint.');
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : 'Impossible de rejoindre le groupe.');
+    } finally {
+      setGroupBusy(false);
+    }
+  };
+
+  const handleCopyCalendarGroupCode = async () => {
+    if (!groupInviteCode) return;
+    try {
+      await navigator.clipboard.writeText(groupInviteCode);
+      showToast('Code du groupe copié.');
+    } catch {
+      setGroupError('Impossible de copier le code. Sélectionnez-le pour le copier manuellement.');
+    }
+  };
+
   const openQuotaEditor = (target: 'cp' | 'rtt') => {
     setQuotaCpInput(String(quotas.cp));
     setQuotaRttInput(String(quotas.rtt));
@@ -731,7 +865,7 @@ export default function App() {
   const todayStr = toLocalIsoDate(new Date());
   const weatherForecastEndDate = (() => {
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 6);
+    endDate.setDate(endDate.getDate() + weatherForecastDays);
     return toLocalIsoDate(endDate);
   })();
   const activeQuotaPeriod = useMemo(
@@ -920,31 +1054,23 @@ export default function App() {
       return;
     }
     const controller = new AbortController();
-    const locations: WeatherLocation[] = [profile.departureCity, ...SUGGESTED_DESTINATIONS];
     setWeatherLoading(true);
     setWeatherError(null);
+    setWeatherByCity({});
 
-    Promise.allSettled(
-      locations.map(async (location) => ({
-        name: location.name,
-        forecasts: await fetchDailyWeather(location, controller.signal),
-      }))
-    ).then((results) => {
+    fetchDailyWeather(profile.departureCity, controller.signal, weatherForecastDays + 1).then((forecasts) => {
       if (controller.signal.aborted) return;
-      const available: Record<string, DailyWeather[]> = {};
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          available[result.value.name] = result.value.forecasts;
-        } else if (index === 0) {
-          setWeatherError('Météo de la ville de départ indisponible pour le moment.');
-        }
-      });
-      setWeatherByCity(available);
+      setWeatherByCity({ [profile.departureCity!.name]: forecasts });
+      setWeatherLoading(false);
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setWeatherError(error instanceof Error ? error.message : 'Météo de la ville de départ indisponible pour le moment.');
+      setWeatherByCity({});
       setWeatherLoading(false);
     });
 
     return () => controller.abort();
-  }, [activeView, profile.departureCity, selectedYear]);
+  }, [activeView, profile.departureCity, isPro, selectedYear, weatherForecastDays]);
 
   // Check if a bridge opportunity is already booked
   const isBridgeBooked = (bridge: BridgeOpportunity) => {
@@ -1200,10 +1326,14 @@ export default function App() {
   useEffect(() => {
     if (activeView !== 'calendar') return;
     const timeout = window.setTimeout(() => {
-      currentCalendarDayRef.current?.scrollIntoView({
+      const container = calendarMonthsContainerRef.current;
+      const month = currentCalendarMonthRef.current;
+      if (!container || !month) return;
+      const containerTop = container.getBoundingClientRect().top;
+      const monthTop = month.getBoundingClientRect().top;
+      container.scrollTo({
+        top: container.scrollTop + monthTop - containerTop,
         behavior: 'smooth',
-        block: 'center',
-        inline: 'nearest',
       });
     }, 300);
     return () => window.clearTimeout(timeout);
@@ -1227,12 +1357,17 @@ export default function App() {
     return cells;
   }, [calendarMonthIndex, selectedYear]);
 
-  const themeOptions: { value: Personalization['theme']; label: string; icon: React.ElementType }[] = [
-    { value: 'indigo', label: 'Indigo', icon: Palette },
-    { value: 'pastel', label: 'Pastel', icon: Sparkles },
-    { value: 'emerald', label: 'Émeraude', icon: Leaf },
-    { value: 'dark', label: 'Sombre', icon: Moon },
-    { value: 'cat', label: 'Chat 🐱', icon: Cat },
+  const themeOptions: {
+    value: Personalization['theme'];
+    label: string;
+    icon: React.ElementType;
+    premium: boolean;
+  }[] = [
+    { value: 'indigo', label: 'Indigo', icon: Palette, premium: false },
+    { value: 'emerald', label: 'Émeraude', icon: Leaf, premium: false },
+    { value: 'oled', label: 'OLED', icon: Moon, premium: true },
+    { value: 'pastel', label: 'Pastel', icon: Sparkles, premium: true },
+    { value: 'seasonal', label: 'Saisonnier', icon: CalendarDays, premium: true },
   ];
 
   if (authInitializing) {
@@ -1249,6 +1384,7 @@ export default function App() {
   return (
     <div
       data-theme={personalization.theme}
+      data-season={['hiver', 'hiver', 'printemps', 'printemps', 'printemps', 'ete', 'ete', 'ete', 'automne', 'automne', 'automne', 'hiver'][new Date().getMonth()]}
       style={{
         fontFamily: personalization.font === 'system'
           ? 'system-ui, -apple-system, sans-serif'
@@ -1388,7 +1524,9 @@ export default function App() {
                     ? `Calendrier de ${partnerCalendar?.partnerName ?? 'mon partenaire'}`
                     : calendarViewMode === 'duo'
                       ? 'Vue Duo / Superposée'
-                      : 'Mon calendrier'}
+                      : calendarViewMode === 'group'
+                        ? `Groupe · ${groupCalendar?.name ?? calendarGroups.find((group) => group.id === selectedGroupId)?.name ?? ''}`
+                        : 'Mon calendrier'}
                 </h1>
                 <p className="mt-1 text-xs text-slate-500">
                   Période de validité · {formatShortDateFr(activeQuotaPeriod.start)} {activeQuotaPeriod.start.slice(0, 4)} – {formatShortDateFr(activeQuotaPeriod.end)} {activeQuotaPeriod.end.slice(0, 4)}
@@ -1412,8 +1550,16 @@ export default function App() {
                   <span className="sr-only">Vue du calendrier</span>
                   <select
                     aria-label="Vue du calendrier"
-                    value={calendarViewMode}
-                    onChange={(event) => setCalendarViewMode(event.target.value as typeof calendarViewMode)}
+                    value={calendarViewMode === 'group' ? `group:${selectedGroupId}` : calendarViewMode}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value.startsWith('group:')) {
+                        setSelectedGroupId(value.slice('group:'.length));
+                        setCalendarViewMode('group');
+                      } else {
+                        setCalendarViewMode(value as 'mine' | 'partner' | 'duo');
+                      }
+                    }}
                     className="max-w-48 bg-transparent font-bold text-slate-700 focus:outline-none"
                   >
                     <option value="mine">Mon calendrier</option>
@@ -1421,6 +1567,9 @@ export default function App() {
                       Calendrier de {partnerCalendar?.partnerName ?? 'mon partenaire'}
                     </option>
                     <option value="duo" disabled={!partnerCalendar}>Vue Duo / Superposée</option>
+                    {isPro && calendarGroups.map((group) => (
+                      <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
+                    ))}
                   </select>
                 </label>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />CP posé</span>
@@ -1436,6 +1585,28 @@ export default function App() {
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-300" />Férié</span>
               </div>
             </div>
+            {calendarViewMode === 'group' && groupCalendar && (
+              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2">
+                {groupCalendar.members.map((member) => (
+                  <label key={member.id} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={visibleGroupMembers[member.id] ?? true}
+                      onChange={(event) => setVisibleGroupMembers((current) => ({
+                        ...current,
+                        [member.id]: event.target.checked,
+                      }))}
+                      className="accent-violet-600"
+                    />
+                    <span aria-hidden="true">{member.avatar}</span>
+                    {member.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            {calendarViewMode === 'group' && groupError && (
+              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-[11px] text-red-700">{groupError}</p>
+            )}
 
             {nextRestDay && (
               <aside className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50 px-4 py-3 shadow-sm">
@@ -1503,14 +1674,25 @@ export default function App() {
               </article>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              ref={calendarMonthsContainerRef}
+              role="region"
+              aria-label="Mois du calendrier"
+              tabIndex={0}
+              className="max-h-[60dvh] overflow-y-auto overscroll-contain rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+            >
+            <div className="grid grid-cols-1 gap-3 p-1 sm:grid-cols-2 xl:grid-cols-3">
               {calendarMonths.map((month) => {
                 const holidays = new Map(
                   getFrenchHolidays(month.year).map((holiday) => [holiday.date, holiday])
                 );
+                const isCurrentMonth =
+                  month.year === Number(todayStr.slice(0, 4)) &&
+                  month.monthIndex === Number(todayStr.slice(5, 7)) - 1;
                 return (
                   <article
                     key={`${month.year}-${month.monthIndex}`}
+                    ref={isCurrentMonth ? currentCalendarMonthRef : undefined}
                     className="scroll-mt-20 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm"
                   >
                     <h2 className="mb-2 text-sm font-extrabold text-slate-800">{month.label}</h2>
@@ -1525,15 +1707,24 @@ export default function App() {
                         const { dateStr, dayNumber, isWeekend } = cell;
                         const myDayLeaves = leaves.filter((item) => item.date === dateStr);
                         const partnerDayLeaves = partnerCalendar?.leaves.filter((item) => item.date === dateStr) ?? [];
+                        const groupDayLeaves = groupCalendar?.id === selectedGroupId
+                          ? groupCalendar.leaves.filter((item) =>
+                          item.date === dateStr && visibleGroupMembers[item.memberId] !== false
+                            )
+                          : [];
                         const isSharedRest = myDayLeaves.length > 0 && partnerDayLeaves.length > 0;
                         const dayLeaves = calendarViewMode === 'partner'
                           ? partnerDayLeaves
                           : calendarViewMode === 'duo'
                             ? [...myDayLeaves, ...partnerDayLeaves]
+                            : calendarViewMode === 'group'
+                              ? groupDayLeaves
                             : myDayLeaves;
                         const leave = calendarViewMode === 'partner'
                           ? partnerDayLeaves[0]
-                          : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? partnerDayLeaves[0] : undefined);
+                          : calendarViewMode === 'group'
+                            ? groupDayLeaves[0]
+                            : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? partnerDayLeaves[0] : undefined);
                         const isPartnerOnly = calendarViewMode === 'partner' && Boolean(leave);
                         const holiday = holidays.get(dateStr);
                         const isToday = dateStr === todayStr;
@@ -1543,12 +1734,16 @@ export default function App() {
                         const inPeriod = dateStr >= activeQuotaPeriod.start && dateStr <= activeQuotaPeriod.end;
                         const isPast = dateStr < todayStr;
                         const pastCanBeBooked = month.year === new Date().getFullYear();
-                        const disabled = calendarViewMode === 'partner' || (!myDayLeaves.length && (
+                        const disabled =
+                          calendarViewMode === 'partner' ||
+                          calendarViewMode === 'group' ||
+                          (calendarViewMode === 'duo' && !isPro) ||
+                          (!myDayLeaves.length && (
                           !inPeriod ||
                           isWeekend ||
                           Boolean(holiday) ||
                           (isPast && !pastCanBeBooked)
-                        ));
+                          ));
                         const dayColor = isSharedRest
                           ? 'bg-gradient-to-br from-emerald-500 to-fuchsia-500 text-white ring-2 ring-white shadow-sm'
                           : isPartnerOnly
@@ -1570,11 +1765,19 @@ export default function App() {
                             disabled={disabled}
                             aria-current={isToday ? 'date' : undefined}
                             onClick={() => {
-                              if (calendarViewMode === 'partner') return;
+                              if (
+                                calendarViewMode === 'partner' ||
+                                calendarViewMode === 'group' ||
+                                (calendarViewMode === 'duo' && !isPro)
+                              ) return;
                               myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
                             }}
                             title={isSharedRest
                               ? `Repos partagé avec ${partnerCalendar?.partnerName} 🏖️`
+                              : calendarViewMode === 'group'
+                                ? groupDayLeaves.map((item) => `${item.memberName} · ${item.type}`).join(', ') || `Groupe ${groupCalendar?.name ?? ''} · lecture seule`
+                              : calendarViewMode === 'duo' && !isPro
+                                ? 'Vue Duo en lecture seule · édition réservée à Pro'
                               : leave
                                 ? `${dayLeaves.map((item) => `${item.type}${item.halfDay ? ` demi-journée ${item.halfDay === 'morning' ? 'matin' : 'après-midi'}` : ''}`).join(' + ')} posé${isPartnerOnly ? ` par ${partnerCalendar?.partnerName}` : ''}${calendarViewMode !== 'partner' ? ' · toucher pour retirer' : ''}`
                               : holiday
@@ -1609,11 +1812,16 @@ export default function App() {
                 );
               })}
             </div>
+            </div>
             <p className="text-center text-[11px] text-slate-500">
               {calendarViewMode === 'partner'
                 ? `Calendrier en lecture seule de ${partnerCalendar?.partnerName ?? 'votre partenaire'}.`
+                : calendarViewMode === 'group'
+                  ? `Calendrier du groupe ${groupCalendar?.name ?? ''} · lecture seule. Cochez les membres à afficher.`
                 : calendarViewMode === 'duo'
-                  ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
+                  ? isPro
+                    ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
+                    : '🏖️ Consultation Duo gratuite en lecture seule. L’édition et la synchronisation sont réservées à Pro.'
                   : 'Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.'}
             </p>
             {calendarWeatherError && (
@@ -1621,6 +1829,10 @@ export default function App() {
                 {calendarWeatherError}
               </p>
             )}
+            <AdBanner
+              isPro={isPro}
+              onUpgrade={() => void handleSetProStatus(true)}
+            />
           </section>
         )}
 
@@ -1965,8 +2177,8 @@ export default function App() {
                       });
 
                       return (
+                        <div key={item.id} className="space-y-2">
                         <div
-                          key={item.id}
                           className="bg-white p-3.5 rounded-2xl border border-slate-200/80 flex justify-between items-center hover:border-slate-300 transition shadow-xs"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -2011,6 +2223,8 @@ export default function App() {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
+                        </div>
+                        <EscapadesPanel date={item.date} isPro={isPro} collapsed />
                         </div>
                       );
                     })
@@ -2083,7 +2297,7 @@ export default function App() {
 
               <p className="mb-3 text-[11px] text-slate-500">
                 {profile.departureCity
-                  ? `Météo à ${profile.departureCity.name} et idées de sorties régionales · prévisions disponibles jusqu'à 16 jours.`
+                  ? `Météo à ${profile.departureCity.name} · prévisions jusqu'à J+${weatherForecastDays}.`
                   : 'Ville de départ non renseignée : les conseils météo et idées de sorties ne seront pas personnalisés.'}
               </p>
               {!profile.departureCity && (
@@ -2145,16 +2359,6 @@ export default function App() {
                     const forecast = departureForecasts.find((day) => day.date === slot.date);
                     return forecast ? [{ ...forecast, label: slot.label }] : [];
                   });
-                  const regionalForecasts = SUGGESTED_DESTINATIONS.flatMap((destination) => {
-                    const forecast = (weatherByCity[destination.name] ?? [])
-                      .filter((day) => bridge.timeline.some((slot) => slot.date === day.date));
-                    if (forecast.length === 0) return [];
-                    const averageRain = forecast.reduce((sum, day) => sum + day.precipitationProbability, 0) / forecast.length;
-                    const averageTemperature = forecast.reduce((sum, day) => sum + day.maximumTemperature, 0) / forecast.length;
-                    const weatherScore = averageRain + Math.abs(averageTemperature - 22) * 2;
-                    return [{ destination, forecast, averageRain, averageTemperature, weatherScore }];
-                  }).sort((a, b) => a.weatherScore - b.weatherScore);
-                  const recommendedRegion = regionalForecasts[0];
                   return (
                     <div
                       key={bridge.id}
@@ -2221,24 +2425,18 @@ export default function App() {
                                   return `${day.label} ${description.icon} ${Math.round(day.maximumTemperature)}°`;
                                 }).join(' · ')}
                               </p>
-                              {recommendedRegion && (
-                                <p className="mt-2 text-[11px] leading-relaxed text-sky-800">
-                                  <strong>Idée sortie · {recommendedRegion.destination.name} :</strong>{' '}
-                                  {recommendedRegion.averageRain < 45
-                                    ? recommendedRegion.destination.activities.dry
-                                    : recommendedRegion.destination.activities.rainy}
-                                  <span className="ml-1 text-sky-600">
-                                    ({Math.round(recommendedRegion.averageTemperature)}° · pluie {Math.round(recommendedRegion.averageRain)} %)
-                                  </span>
-                                </p>
-                              )}
                             </>
                           ) : (
                             <p className="mt-1 text-[11px] text-sky-700">
-                              Prévisions non disponibles aussi longtemps à l&apos;avance. Elles apparaîtront jusqu&apos;à 16 jours avant le pont.
+                              Prévisions non disponibles aussi longtemps à l&apos;avance. Elles apparaîtront dans les {weatherForecastDays} prochains jours.
                             </p>
                           )}
                         </div>}
+                        <EscapadesPanel
+                          date={bridge.bridgeDates[0]}
+                          isPro={isPro}
+                          collapsed
+                        />
                       </div>
 
                       <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
@@ -2462,6 +2660,35 @@ export default function App() {
                   Facultatif. Sans ville, les conseils météo et suggestions de région ne seront pas personnalisés.
                 </p>
               )}
+              {import.meta.env.DEV && (
+                <div className="space-y-2 rounded-xl border border-indigo-100 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-extrabold text-slate-800">
+                        {isPro ? 'Compte Pro (sans pub)' : 'Compte Gratuit (avec pubs)'}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">Mode de test · effet immédiat</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="Basculer entre le compte Gratuit et le compte Pro"
+                      aria-checked={isPro}
+                      onClick={() => void handleSetProStatus(!isPro)}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                        isPro ? 'bg-indigo-600' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+                          isPro ? 'left-5.5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <ProTestAccessButton />
+                </div>
+              )}
               {profileError && (
                 <p role="alert" className="rounded-xl bg-red-50 p-2.5 text-xs font-semibold text-red-700">
                   {profileError}
@@ -2500,13 +2727,18 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    disabled={duoBusy}
+                    disabled={duoBusy || !isPro}
                     onClick={() => void handleRefreshDuo()}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-100 bg-white py-2 text-xs font-bold text-fuchsia-700 transition hover:bg-fuchsia-50 disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-100 bg-white py-2 text-xs font-bold text-fuchsia-700 transition hover:bg-fuchsia-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Actualiser le calendrier partagé
+                    {isPro ? 'Actualiser le calendrier partagé' : 'Synchronisation réservée à Pro'}
                   </button>
+                  {!isPro && (
+                    <p className="text-[10px] text-fuchsia-800">
+                      La consultation reste gratuite. Passez Pro pour synchroniser et modifier la vue Duo.
+                    </p>
+                  )}
                   <button
                     type="button"
                     disabled={duoBusy}
@@ -2590,6 +2822,103 @@ export default function App() {
               )}
             </section>
 
+            <section className="rounded-2xl border border-violet-100 bg-violet-50/50 p-3.5 space-y-3">
+              <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
+                <UsersRound className="h-4 w-4 text-violet-600" />
+                Plannings de groupe
+                {!isPro && <Crown className="ml-auto h-3.5 w-3.5 text-amber-500" />}
+              </h4>
+              {!isPro ? (
+                <p className="rounded-xl bg-white p-2.5 text-[11px] font-semibold text-violet-800">
+                  Passez Pro pour créer des groupes personnalisés, inviter des membres et filtrer leur calendrier.
+                </p>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={groupNameInput}
+                      onChange={(event) => setGroupNameInput(event.target.value)}
+                      placeholder="Nom du groupe (Famille, Amis…)"
+                      aria-label="Nom du nouveau groupe"
+                      className="min-w-0 flex-1 rounded-xl border border-violet-100 bg-white p-2.5 text-xs text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      disabled={groupBusy || !groupNameInput.trim()}
+                      onClick={() => void handleCreateCalendarGroup()}
+                      className="shrink-0 rounded-xl bg-violet-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      Créer
+                    </button>
+                  </div>
+                  {calendarGroups.length > 0 && (
+                    <>
+                      <label className="block text-[10px] font-semibold text-slate-600">
+                        Groupe sélectionné
+                        <select
+                          value={selectedGroupId}
+                          onChange={(event) => setSelectedGroupId(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-violet-100 bg-white px-2 py-2 text-xs"
+                        >
+                          {calendarGroups.map((group) => (
+                            <option key={group.id} value={group.id}>{group.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {calendarGroups.some((group) => group.id === selectedGroupId && group.ownerId === user?.id) && (
+                        <button
+                          type="button"
+                          disabled={groupBusy}
+                          onClick={() => void handleCreateCalendarGroupInvitation()}
+                          className="w-full rounded-xl border border-violet-200 bg-white py-2 text-xs font-bold text-violet-700 disabled:opacity-50"
+                        >
+                          Créer un code pour inviter des membres
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {groupInviteCode && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-100 bg-white p-2.5">
+                      <code className="break-all text-[10px] font-extrabold text-violet-800">{groupInviteCode}</code>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyCalendarGroupCode()}
+                        aria-label="Copier le code du groupe"
+                        className="rounded-lg bg-violet-50 p-2 text-violet-700"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                  <form onSubmit={handleAcceptCalendarGroupInvitation} className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={24}
+                      value={groupInviteInput}
+                      onChange={(event) => setGroupInviteInput(event.target.value.toUpperCase())}
+                      placeholder="JOURSOFF-GRP-…"
+                      aria-label="Code d’invitation au groupe"
+                      className="min-w-0 flex-1 rounded-xl border border-violet-100 bg-white p-2.5 text-xs tracking-wide text-slate-800"
+                    />
+                    <button
+                      type="submit"
+                      disabled={groupBusy || !groupInviteInput.trim()}
+                      className="shrink-0 rounded-xl border border-violet-200 bg-white px-3 py-2 text-[11px] font-bold text-violet-700 disabled:opacity-50"
+                    >
+                      Rejoindre
+                    </button>
+                  </form>
+                </>
+              )}
+              {groupError && (
+                <p role="alert" className="rounded-xl bg-red-50 p-2.5 text-[10px] font-semibold text-red-700">
+                  {groupError}
+                </p>
+              )}
+            </section>
+
             <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
                 <Palette className="h-4 w-4 text-indigo-600" />
@@ -2602,16 +2931,21 @@ export default function App() {
                     <button
                       key={option.value}
                       type="button"
+                      disabled={option.premium && !isPro}
                       onClick={() => setPersonalization((current) => ({ ...current, theme: option.value }))}
                       aria-pressed={personalization.theme === option.value}
+                      title={option.premium && !isPro ? 'Thème réservé à Pro' : option.label}
                       className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[10px] font-bold transition ${
                         personalization.theme === option.value
                           ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
                           : 'border-slate-200 bg-white text-slate-600'
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       <Icon className="h-4 w-4" />
-                      {option.label}
+                      <span className="flex items-center gap-1">
+                        {option.label}
+                        {option.premium && !isPro && <Crown className="h-3 w-3 text-amber-500" />}
+                      </span>
                     </button>
                   );
                 })}
@@ -3121,6 +3455,7 @@ export default function App() {
                   )}
                 </div>
               )}
+              <EscapadesPanel date={formDate} isPro={isPro} />
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">

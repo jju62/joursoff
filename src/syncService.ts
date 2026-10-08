@@ -4,6 +4,13 @@ import { LeaveItem } from './App';
 export interface UserQuotas {
   cp: number;
   rtt: number;
+  rttMode?: 'fixed' | 'monthly';
+  rttMonthly?: number;
+  rttCurrentBalance?: number;
+  rttBalanceDate?: string;
+  rttMax?: number | null;
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 export async function fetchUserSettings(userId: string): Promise<{
@@ -42,31 +49,52 @@ export async function fetchUserSettings(userId: string): Promise<{
       leaves = data.settings.leaves;
     }
 
-    // Parser les soldes CP / RTT
-    if (data.cp_initial !== undefined || data.rtt_initial !== undefined) {
-      quotas = {
-        cp: Number(data.cp_initial ?? 25),
-        rtt: Number(data.rtt_initial ?? 10),
-      };
-    } else if (data.quotas && typeof data.quotas === 'object') {
-      quotas = {
-        cp: Number(data.quotas.cp ?? 25),
-        rtt: Number(data.quotas.rtt ?? 10),
-      };
+    let storedQuotas: Record<string, unknown> | null = null;
+    if (data.quotas && typeof data.quotas === 'object' && !Array.isArray(data.quotas)) {
+      storedQuotas = data.quotas;
     } else if (typeof data.quotas === 'string') {
       try {
-        const q = JSON.parse(data.quotas);
-        quotas = { cp: Number(q.cp ?? 25), rtt: Number(q.rtt ?? 10) };
+        const parsed: unknown = JSON.parse(data.quotas);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          storedQuotas = parsed as Record<string, unknown>;
+        }
       } catch {}
-    } else if (data.cp_quota !== undefined || data.rtt_quota !== undefined) {
+    }
+
+    let nestedQuotas: unknown = storedQuotas ?? data.data?.quotas ?? data.settings?.quotas;
+    if (typeof nestedQuotas === 'string') {
+      try {
+        nestedQuotas = JSON.parse(nestedQuotas);
+      } catch {
+        nestedQuotas = null;
+      }
+    }
+    if (nestedQuotas && typeof nestedQuotas === 'object' && !Array.isArray(nestedQuotas)) {
+      const stored = nestedQuotas as Record<string, unknown>;
+      const rttMode = stored.rttMode === 'monthly' || stored.rttMode === 'fixed'
+        ? stored.rttMode
+        : undefined;
       quotas = {
-        cp: Number(data.cp_quota ?? 25),
-        rtt: Number(data.rtt_quota ?? 10),
+        cp: Number(stored.cp ?? data.cp_initial ?? data.cp_quota ?? 25),
+        rtt: Number(stored.rtt ?? data.rtt_initial ?? data.rtt_quota ?? 10),
+        ...(rttMode ? { rttMode } : {}),
+        ...(Number.isFinite(Number(stored.rttMonthly)) ? { rttMonthly: Number(stored.rttMonthly) } : {}),
+        ...(Number.isFinite(Number(stored.rttCurrentBalance))
+          ? { rttCurrentBalance: Number(stored.rttCurrentBalance) }
+          : {}),
+        ...(typeof stored.rttBalanceDate === 'string' ? { rttBalanceDate: stored.rttBalanceDate } : {}),
+        ...(stored.rttMax === null || Number.isFinite(Number(stored.rttMax))
+          ? { rttMax: stored.rttMax === null ? null : Number(stored.rttMax) }
+          : {}),
+        ...(typeof stored.periodStart === 'string' ? { periodStart: stored.periodStart } : {}),
+        ...(typeof stored.periodEnd === 'string' ? { periodEnd: stored.periodEnd } : {}),
       };
-    } else if (data.data?.quotas) {
-      quotas = data.data.quotas;
-    } else if (data.settings?.quotas) {
-      quotas = data.settings.quotas;
+    } else if (data.cp_initial !== undefined || data.rtt_initial !== undefined ||
+      data.cp_quota !== undefined || data.rtt_quota !== undefined) {
+      quotas = {
+        cp: Number(data.cp_initial ?? data.cp_quota ?? 25),
+        rtt: Number(data.rtt_initial ?? data.rtt_quota ?? 10),
+      };
     }
 
     return { leaves, quotas };
@@ -97,11 +125,12 @@ export async function syncToCloud(
     const userId = authUser.id;
     const updatedAt = new Date().toISOString();
 
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       user_id: userId,
       leaves: leaves,
       cp_initial: quotas.cp,
       rtt_initial: quotas.rtt,
+      quotas,
       updated_at: updatedAt,
     };
 
