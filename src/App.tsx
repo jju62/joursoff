@@ -75,6 +75,8 @@ import { useAuth } from './context/AuthContext';
 import { ProTestAccessButton } from './ProTestAccessButton';
 import { ExportCalendarModal } from './components/ExportCalendarModal';
 import { PaywallModal } from './components/PaywallModal';
+import { AppTour } from './components/AppTour';
+import { OnboardingData, OnboardingWizard } from './components/OnboardingWizard';
 
 export interface LeaveItem {
   id: number;
@@ -184,7 +186,14 @@ type ToastState = {
 };
 
 export default function App() {
-  const { user, isPro, setIsPro, loading: authInitializing } = useAuth();
+  const {
+    user,
+    isPro,
+    setIsPro,
+    hasCompletedOnboarding,
+    completeOnboarding,
+    loading: authInitializing,
+  } = useAuth();
   const [leaves, setLeaves] = useState<LeaveItem[]>([]);
   const leavesRef = React.useRef(leaves);
   const [quotas, setQuotas] = useState<Quotas>(getDefaultQuotas);
@@ -223,6 +232,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isAppTourOpen, setIsAppTourOpen] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   // Guard : empêche la double-sync (INITIAL_SESSION + SIGNED_IN)
@@ -377,6 +387,14 @@ export default function App() {
       ...(departureCity !== undefined ? { departureCity } : {}),
     }));
   }, [user]);
+
+  useEffect(() => {
+    setIsAppTourOpen(Boolean(
+      user &&
+      hasCompletedOnboarding &&
+      user.user_metadata.has_completed_app_tour !== true
+    ));
+  }, [hasCompletedOnboarding, user, user?.user_metadata.has_completed_app_tour]);
 
   const updateLeaves = (nextLeaves: LeaveItem[]) => {
     leavesRef.current = nextLeaves;
@@ -646,6 +664,67 @@ export default function App() {
     } finally {
       setProfileSaving(false);
     }
+  };
+
+  const handleCompleteOnboarding = async (data: OnboardingData) => {
+    if (isSyncing) {
+      throw new Error('Votre calendrier est encore en cours de synchronisation. Patientez un instant puis réessayez.');
+    }
+    const renewalStart = `${String(data.renewalMonth).padStart(2, '0')}-01`;
+    const renewalEndMonth = data.renewalMonth === 1 ? 12 : data.renewalMonth - 1;
+    const renewalEnd = `${String(renewalEndMonth).padStart(2, '0')}-${String(
+      new Date(2000, renewalEndMonth, 0).getDate()
+    ).padStart(2, '0')}`;
+    const today = toLocalIsoDate(new Date());
+    const nextQuotas: Quotas = {
+      ...getDefaultQuotas(),
+      cp: data.annualCp,
+      rtt: data.annualRtt,
+      rttMode: data.rttMode,
+      rttMonthly: data.monthlyRtt,
+      rttCurrentBalance: data.hasRtt && data.rttMode === 'monthly' ? 0 : data.annualRtt,
+      rttBalanceDate: today,
+      rttMax: data.hasRtt ? data.annualRtt : 0,
+      periodStart: renewalStart,
+      periodEnd: renewalEnd,
+    };
+
+    if (!await syncToCloud(leaves, nextQuotas)) {
+      throw new Error('Impossible de synchroniser vos soldes. Vérifiez votre connexion puis réessayez.');
+    }
+    await completeOnboarding(data);
+    setQuotas(nextQuotas);
+    setProfile((current) => ({
+      ...current,
+      departureCity: data.departureCity ?? current.departureCity,
+    }));
+    if (data.departureCity) {
+      setProfileCityInput(data.departureCity.name.split(',')[0]);
+    }
+  };
+
+  const handleTourStepChange = useCallback((step: number) => {
+    if (step === 0) {
+      setActiveView('calendar');
+      setIsAuthModalOpen(false);
+    } else if (step === 1) {
+      setActiveView('optimizer');
+      setIsAuthModalOpen(false);
+    } else if (step === 2) {
+      setIsAuthModalOpen(true);
+    } else {
+      setIsAuthModalOpen(false);
+      setActiveView('calendar');
+    }
+  }, []);
+
+  const handleCompleteAppTour = async () => {
+    if (!user) throw new Error('Connectez-vous pour enregistrer la visite guidée.');
+    const { error } = await supabase.auth.updateUser({
+      data: { has_completed_app_tour: true },
+    });
+    if (error) throw error;
+    setIsAppTourOpen(false);
   };
 
   const handleSelectAvatar = async (avatar: string) => {
@@ -1428,6 +1507,14 @@ export default function App() {
     { value: 'autumn', label: 'Autumn', icon: Leaf, premium: true },
     { value: 'abstract', label: 'Abstract', icon: Sparkles, premium: true },
   ];
+  const storedDepartureCity = user?.user_metadata.departure_city;
+  const onboardingInitialCity = profile.departureCity?.name.split(',')[0] ??
+    (storedDepartureCity &&
+      typeof storedDepartureCity === 'object' &&
+      'name' in storedDepartureCity &&
+      typeof storedDepartureCity.name === 'string'
+      ? storedDepartureCity.name.split(',')[0]
+      : '');
 
   if (authInitializing) {
     return (
@@ -1511,6 +1598,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setIsExportModalOpen(true)}
+            data-tour="export"
             className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
           >
             <Download className="h-4 w-4 text-emerald-600" />
@@ -1576,6 +1664,7 @@ export default function App() {
                 key={view.id}
                 type="button"
                 onClick={() => setActiveView(view.id as typeof activeView)}
+                data-tour={view.id === 'optimizer' ? 'optimizer' : undefined}
                 aria-current={activeView === view.id ? 'page' : undefined}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition active:scale-95 ${
                   activeView === view.id
@@ -1591,7 +1680,7 @@ export default function App() {
         </nav>
 
         {activeView === 'calendar' && (
-          <section key={activeView} aria-label="Calendrier annuel" className="view-enter space-y-4">
+          <section key={activeView} aria-label="Calendrier annuel" data-tour="calendar" className="view-enter space-y-4">
             {!isPro && (
               <AdBanner
                 isPro={isPro}
@@ -2647,6 +2736,7 @@ export default function App() {
               key={item.id}
               type="button"
               onClick={() => setActiveView(item.id as typeof activeView)}
+              data-tour={item.id === 'optimizer' ? 'optimizer' : undefined}
               aria-current={activeView === item.id ? 'page' : undefined}
               className={`flex flex-col items-center gap-1 py-1 text-[10px] font-semibold ${
                 activeView === item.id ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'
@@ -2808,7 +2898,7 @@ export default function App() {
               </p>
             </section>
 
-            <section className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/50 p-3.5 space-y-3">
+            <section data-tour="sharing" className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/50 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
                 <Home className="h-4 w-4 text-fuchsia-600" />
                 Partage / Duo
@@ -3673,6 +3763,13 @@ export default function App() {
         onUpgrade={() => void handleSetProStatus(true)}
         quotas={{ cp: quotas.cp, rtt: quotas.rtt }}
       />
+
+      {user && !hasCompletedOnboarding && (
+        <OnboardingWizard initialCity={onboardingInitialCity} onComplete={handleCompleteOnboarding} />
+      )}
+      {user && hasCompletedOnboarding && isAppTourOpen && (
+        <AppTour onStepChange={handleTourStepChange} onComplete={handleCompleteAppTour} />
+      )}
 
     </div>
   );

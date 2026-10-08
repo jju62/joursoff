@@ -11,6 +11,93 @@ export interface DailyWeather {
   precipitationProbability: number;
 }
 
+function normalizeFrenchCitySearch(query: string) {
+  const frenchSpellings: Record<string, string> = {
+    etienne: 'Étienne',
+  };
+
+  return query
+    .trim()
+    .replace(/\s*-\s*/g, ' ')
+    .split(/\s+/)
+    .map((part, index) => {
+      const normalized = part.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr-FR');
+      if (frenchSpellings[normalized]) return frenchSpellings[normalized];
+      return index === 0 ? part : part.toLocaleLowerCase('fr-FR');
+    })
+    .join('-');
+}
+
+export async function searchCitySuggestions(
+  query: string,
+  signal?: AbortSignal
+): Promise<WeatherLocation[]> {
+  const queries = [...new Set([query.trim(), normalizeFrenchCitySearch(query)])];
+  for (const cityQuery of queries) {
+    const params = new URLSearchParams({
+      name: cityQuery,
+      count: '5',
+      language: 'fr',
+      format: 'json',
+    });
+    const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`, { signal });
+    if (!response.ok) throw new Error('Recherche de ville indisponible. Réessayez plus tard.');
+    const result = await response.json() as {
+      results?: {
+        name: string;
+        latitude: number;
+        longitude: number;
+        country?: string;
+        admin1?: string;
+      }[];
+    };
+    if (result.results?.length) {
+      return result.results.map((place) => {
+        const details = [place.admin1, place.country]
+          .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+        return {
+          name: [place.name, ...details].join(', '),
+          latitude: place.latitude,
+          longitude: place.longitude,
+        };
+      });
+    }
+  }
+  return [];
+}
+
+export async function reverseGeocodeCoordinates(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal
+): Promise<WeatherLocation> {
+  const params = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+    localityLanguage: 'fr',
+  });
+  const response = await fetch(
+    `https://api.bigdatacloud.net/data/reverse-geocode-client?${params}`,
+    { signal }
+  );
+  if (!response.ok) throw new Error('Nom de ville indisponible pour cette position.');
+  const result = await response.json() as {
+    city?: string;
+    locality?: string;
+    principalSubdivision?: string;
+    countryName?: string;
+  };
+  const locality = result.city || result.locality || result.principalSubdivision;
+  if (!locality) throw new Error('Aucune ville proche n’a pu être identifiée pour cette position.');
+  const details = [result.principalSubdivision, result.countryName]
+    .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+  return {
+    name: [locality, ...details.filter((detail) => detail !== locality)].join(', '),
+    latitude,
+    longitude,
+  };
+}
+
 export function weatherDescription(code: number) {
   if (code === 0) return { label: 'Ensoleillé', icon: '☀️' };
   if (code <= 2) return { label: 'Éclaircies', icon: '🌤️' };
@@ -23,24 +110,9 @@ export function weatherDescription(code: number) {
 }
 
 export async function geocodeCity(city: string, signal?: AbortSignal): Promise<WeatherLocation> {
-  const params = new URLSearchParams({
-    name: city,
-    count: '1',
-    language: 'fr',
-    format: 'json',
-  });
-  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`, { signal });
-  if (!response.ok) throw new Error('Recherche de ville indisponible. Réessayez plus tard.');
-  const result = await response.json() as {
-    results?: { name: string; latitude: number; longitude: number; country?: string }[];
-  };
-  const match = result.results?.[0];
+  const match = (await searchCitySuggestions(city, signal))[0];
   if (!match) throw new Error(`Ville introuvable : ${city}.`);
-  return {
-    name: match.country ? `${match.name}, ${match.country}` : match.name,
-    latitude: match.latitude,
-    longitude: match.longitude,
-  };
+  return match;
 }
 
 export async function fetchDailyWeather(

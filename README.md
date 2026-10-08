@@ -83,3 +83,13 @@ compte autorisé, puis le client renouvelle sa session avant d’écrire le stat
 
 Ne validez pas un abonnement payant à partir de l’état local du navigateur. La
 validation des droits Pro nécessite une source de confiance côté serveur.
+
+## Parcours de première connexion
+
+Appliquez [`supabase/migrations/20261008113000_onboarding.sql`](./supabase/migrations/20261008113000_onboarding.sql)
+après la migration des profils. Elle ajoute l’état et les préférences de configuration
+à `public.profiles`, puis fournit la RPC `complete_my_onboarding` pour que chaque
+utilisateur connecté enregistre sa configuration sans droit de mise à jour directe de
+son profil. À sa première connexion, l’application demande la ville de départ, la zone
+scolaire et les paramètres de congés payés et RTT ; elle affiche ensuite une visite
+guidée du calendrier, de l’optimiseur, des partages et des exports.

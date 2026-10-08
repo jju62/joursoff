@@ -9,11 +9,14 @@ import {
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import type { OnboardingData } from '../components/OnboardingWizard';
 
 type AuthContextValue = {
   user: User | null;
   isPro: boolean;
   setIsPro: (value: boolean) => Promise<void>;
+  hasCompletedOnboarding: boolean;
+  completeOnboarding: (data: OnboardingData) => Promise<void>;
   loading: boolean;
 };
 
@@ -26,6 +29,7 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isPro, setIsProState] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [loading, setLoading] = useState(true);
   const generation = useRef(0);
 
@@ -36,16 +40,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loadProfile = useCallback(async (currentUser: User | null, requestGeneration: number) => {
     if (!currentUser) {
       updateIsPro(false);
+      setHasCompletedOnboarding(false);
       return;
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('is_pro')
+      .select('is_pro, has_completed_onboarding')
       .eq('id', currentUser.id)
       .maybeSingle();
     if (error) throw error;
     if (generation.current !== requestGeneration) return;
     updateIsPro(data?.is_pro === true);
+    setHasCompletedOnboarding(data?.has_completed_onboarding === true);
   }, [updateIsPro]);
 
   useEffect(() => {
@@ -58,6 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (!active || generation.current !== requestGeneration) return;
           console.error('Impossible de charger le profil Supabase :', error);
           updateIsPro(false);
+          setHasCompletedOnboarding(false);
         })
         .finally(() => {
           if (active && generation.current === requestGeneration) setLoading(false);
@@ -83,6 +90,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('Impossible de vérifier la session Supabase :', error);
       setUser(null);
       updateIsPro(false);
+      setHasCompletedOnboarding(false);
       setLoading(false);
     });
 
@@ -115,8 +123,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [isPro, updateIsPro, user]);
 
+  const completeOnboarding = useCallback(async (data: OnboardingData) => {
+    if (!user) throw new Error('Connectez-vous pour enregistrer votre configuration.');
+
+    if (data.departureCity) {
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: { departure_city: data.departureCity },
+      });
+      if (metadataError) throw metadataError;
+    }
+
+    const { data: completed, error } = await supabase.rpc('complete_my_onboarding', {
+      p_departure_city: data.departureCity?.name ?? null,
+      p_school_zone: data.schoolZone,
+      p_annual_cp: data.annualCp,
+      p_cp_renewal_month: data.renewalMonth,
+      p_has_rtt: data.hasRtt,
+      p_annual_rtt: data.annualRtt,
+      p_rtt_mode: data.rttMode,
+    });
+    if (error) throw error;
+    if (completed !== true) throw new Error('Supabase n’a pas confirmé la fin de la configuration.');
+
+    setHasCompletedOnboarding(true);
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, isPro, setIsPro, loading }}>
+    <AuthContext.Provider value={{ user, isPro, setIsPro, hasCompletedOnboarding, completeOnboarding, loading }}>
       {children}
     </AuthContext.Provider>
   );
