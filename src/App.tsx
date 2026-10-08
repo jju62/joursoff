@@ -73,6 +73,8 @@ import {
 } from './groupService';
 import { useAuth } from './context/AuthContext';
 import { ProTestAccessButton } from './ProTestAccessButton';
+import { ExportCalendarModal } from './components/ExportCalendarModal';
+import { PaywallModal } from './components/PaywallModal';
 
 export interface LeaveItem {
   id: number;
@@ -146,9 +148,35 @@ function toLocalIsoDate(date: Date) {
 }
 
 type Personalization = {
-  theme: 'indigo' | 'emerald' | 'oled' | 'pastel' | 'seasonal';
+  theme: 'indigo' | 'emerald' | 'oled' | 'pastel' | 'seasonal' | 'midnight' | 'autumn' | 'abstract';
   font: 'jakarta' | 'system' | 'rounded';
 };
+
+const FREE_AVATARS = ['👋', '😁', '😎', '🐱'];
+const PRO_AVATARS = [
+  '🐼', '🦊', '🌿', '🤔', '😴', '🤖', '🚀', '🌈', '🍎', '🍕', '🍦', '🐶',
+  '🦉', '🐻', '👽', '🤡', '👻', '☠️', '🧡', '💜', '🔥', '⭐', '✨', '🎉',
+  '🎁', '📅', '🗺️', '✈️', '💻', '💡', '🎵', '🌸',
+];
+const ALL_AVATARS = [...FREE_AVATARS, ...PRO_AVATARS];
+
+function isPersonalization(value: unknown): value is Personalization {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.theme === 'indigo' ||
+      candidate.theme === 'emerald' ||
+      candidate.theme === 'oled' ||
+      candidate.theme === 'pastel' ||
+      candidate.theme === 'seasonal' ||
+      candidate.theme === 'midnight' ||
+      candidate.theme === 'autumn' ||
+      candidate.theme === 'abstract') &&
+    (candidate.font === 'jakarta' ||
+      candidate.font === 'system' ||
+      candidate.font === 'rounded')
+  );
+}
 
 type ToastState = {
   message: string;
@@ -194,6 +222,8 @@ export default function App() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   // Guard : empêche la double-sync (INITIAL_SESSION + SIGNED_IN)
   const hasSyncedRef = React.useRef(false);
@@ -321,6 +351,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const metadata = user.user_metadata;
+    if (isPersonalization(metadata?.personalization)) {
+      setPersonalization(metadata.personalization);
+    }
     const storedCity = metadata?.departure_city;
     const departureCity: WeatherLocation | null | undefined =
       storedCity === null
@@ -467,10 +500,16 @@ export default function App() {
   }, [calendarViewMode, isPro, selectedGroupId]);
 
   useEffect(() => {
-    if (!isPro && ['oled', 'pastel', 'seasonal'].includes(personalization.theme)) {
+    if (!isPro && personalization.theme !== 'indigo') {
       setPersonalization((current) => ({ ...current, theme: 'indigo' }));
     }
   }, [personalization.theme, isPro]);
+
+  useEffect(() => {
+    if (!isPro && !FREE_AVATARS.includes(profile.avatar)) {
+      setProfile((current) => ({ ...current, avatar: '👋' }));
+    }
+  }, [isPro, profile.avatar]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -628,6 +667,23 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur de synchronisation.';
       setProfileError(`Avatar enregistré sur cet appareil. Synchronisation du compte impossible : ${message}`);
+    }
+  };
+
+  const handleSavePersonalization = async (nextPersonalization: Personalization) => {
+    setPersonalization(nextPersonalization);
+    if (!user) return;
+
+    setProfileError(null);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { personalization: nextPersonalization },
+      });
+      if (error) throw error;
+      showToast('Thème et police enregistrés dans votre profil.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur de synchronisation.';
+      setProfileError(`Personnalisation appliquée sur cet appareil, mais non enregistrée dans le profil : ${message}`);
     }
   };
 
@@ -1364,10 +1420,13 @@ export default function App() {
     premium: boolean;
   }[] = [
     { value: 'indigo', label: 'Indigo', icon: Palette, premium: false },
-    { value: 'emerald', label: 'Émeraude', icon: Leaf, premium: false },
+    { value: 'emerald', label: 'Émeraude', icon: Leaf, premium: true },
     { value: 'oled', label: 'OLED', icon: Moon, premium: true },
     { value: 'pastel', label: 'Pastel', icon: Sparkles, premium: true },
     { value: 'seasonal', label: 'Saisonnier', icon: CalendarDays, premium: true },
+    { value: 'midnight', label: 'Midnight', icon: Moon, premium: true },
+    { value: 'autumn', label: 'Autumn', icon: Leaf, premium: true },
+    { value: 'abstract', label: 'Abstract', icon: Sparkles, premium: true },
   ];
 
   if (authInitializing) {
@@ -1426,6 +1485,14 @@ export default function App() {
             className="relative flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 cursor-pointer"
           >
             <span className="text-base" aria-hidden="true">{profile.avatar}</span>
+            {isPro && (
+              <span
+                title="Compte Pro actif"
+                className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-amber-400 text-[8px] font-black text-amber-950 shadow-sm"
+              >
+                <Crown className="h-2.5 w-2.5" />
+              </span>
+            )}
           </button>
           <button
             onClick={openProfileSettings}
@@ -1440,6 +1507,14 @@ export default function App() {
             ) : (
               <Cloud className="h-4 w-4 text-slate-400" />
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+          >
+            <Download className="h-4 w-4 text-emerald-600" />
+            Exporter
           </button>
           <button
             onClick={openNewLeaveModal}
@@ -1517,6 +1592,13 @@ export default function App() {
 
         {activeView === 'calendar' && (
           <section key={activeView} aria-label="Calendrier annuel" className="view-enter space-y-4">
+            {!isPro && (
+              <AdBanner
+                isPro={isPro}
+                variant="compact"
+                onUpgrade={() => void handleSetProStatus(true)}
+              />
+            )}
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h1 className="text-xl font-extrabold text-slate-900">
@@ -1829,10 +1911,6 @@ export default function App() {
                 {calendarWeatherError}
               </p>
             )}
-            <AdBanner
-              isPro={isPro}
-              onUpgrade={() => void handleSetProStatus(true)}
-            />
           </section>
         )}
 
@@ -2343,7 +2421,7 @@ export default function App() {
 
               {/* Opportunity Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {displayedBridges.map((bridge) => {
+                {displayedBridges.map((bridge, bridgeIndex) => {
                   const booked = isBridgeBooked(bridge);
                   const additionalCost = getBridgeAdditionalCost(bridge);
                   const balanceDate = bridge.bridgeDates.reduce((latest, date) => date > latest ? date : latest, todayStr);
@@ -2432,6 +2510,15 @@ export default function App() {
                             </p>
                           )}
                         </div>}
+                        {activeView === 'optimizer' && !isPro && bridgeIndex === 0 && (
+                          <div className="mt-3">
+                            <AdBanner
+                              isPro={isPro}
+                              variant="in-feed"
+                              onUpgrade={() => void handleSetProStatus(true)}
+                            />
+                          </div>
+                        )}
                         <EscapadesPanel
                           date={bridge.bridgeDates[0]}
                           isPro={isPro}
@@ -2626,22 +2713,35 @@ export default function App() {
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-slate-600">Avatar</p>
                 <div className="flex flex-wrap gap-2">
-                  {['👋', '😊', '😎', '🌞', '🐱', '🐼', '🦊', '🌿'].map((avatar) => (
+                  {ALL_AVATARS.map((avatar) => {
+                    const premiumAvatar = PRO_AVATARS.includes(avatar);
+                    return (
                     <button
                       key={avatar}
                       type="button"
-                      onClick={() => handleSelectAvatar(avatar)}
+                      onClick={() => {
+                        if (premiumAvatar && !isPro) {
+                          setPaywallFeature('les avatars exclusifs');
+                          return;
+                        }
+                        void handleSelectAvatar(avatar);
+                      }}
                       aria-label={`Choisir l’avatar ${avatar}`}
                       aria-pressed={profile.avatar === avatar}
+                      title={premiumAvatar ? `${avatar} · réservé à Pro` : `Choisir l’avatar ${avatar}`}
                       className={`flex h-9 w-9 items-center justify-center rounded-xl border text-lg transition ${
                         profile.avatar === avatar
                           ? 'border-indigo-400 bg-indigo-50'
                           : 'border-slate-200 bg-white hover:bg-slate-100'
-                      }`}
+                      } relative`}
                     >
                       {avatar}
+                      {premiumAvatar && (
+                        <Crown className="absolute -right-1 -top-1 h-3 w-3 fill-amber-400 text-amber-600" aria-hidden="true" />
+                      )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
               <label className="block text-xs font-semibold text-slate-600">
@@ -2664,10 +2764,11 @@ export default function App() {
                 <div className="space-y-2 rounded-xl border border-indigo-100 bg-white p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-extrabold text-slate-800">
-                        {isPro ? 'Compte Pro (sans pub)' : 'Compte Gratuit (avec pubs)'}
+                      <p className="flex items-center gap-1 text-xs font-extrabold text-slate-800">
+                        {isPro ? <Crown className="h-3.5 w-3.5 text-amber-500" /> : null}
+                        {isPro ? 'Compte Pro Premium' : 'Compte Gratuit'}
                       </p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">Mode de test · effet immédiat</p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">{isPro ? 'Sans pub · accès complet' : 'Avec pubs · mode standard'}</p>
                     </div>
                     <button
                       type="button"
@@ -2931,20 +3032,25 @@ export default function App() {
                     <button
                       key={option.value}
                       type="button"
-                      disabled={option.premium && !isPro}
-                      onClick={() => setPersonalization((current) => ({ ...current, theme: option.value }))}
+                      onClick={() => {
+                        if (option.premium && !isPro) {
+                          setPaywallFeature(`le thème ${option.label}`);
+                          return;
+                        }
+                        void handleSavePersonalization({ ...personalization, theme: option.value });
+                      }}
                       aria-pressed={personalization.theme === option.value}
                       title={option.premium && !isPro ? 'Thème réservé à Pro' : option.label}
                       className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[10px] font-bold transition ${
                         personalization.theme === option.value
                           ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
                           : 'border-slate-200 bg-white text-slate-600'
-                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                      }`}
                     >
                       <Icon className="h-4 w-4" />
                       <span className="flex items-center gap-1">
                         {option.label}
-                        {option.premium && !isPro && <Crown className="h-3 w-3 text-amber-500" />}
+                        {option.premium && <Crown className="h-3 w-3 fill-amber-400 text-amber-600" />}
                       </span>
                     </button>
                   );
@@ -2955,10 +3061,10 @@ export default function App() {
                 Police
                 <select
                   value={personalization.font}
-                  onChange={(event) => setPersonalization((current) => ({
-                    ...current,
+                  onChange={(event) => void handleSavePersonalization({
+                    ...personalization,
                     font: event.target.value as Personalization['font'],
-                  }))}
+                  })}
                   className="ml-auto rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700"
                 >
                   <option value="jakarta">Plus Jakarta Sans</option>
@@ -2972,8 +3078,20 @@ export default function App() {
 
             {user ? (
               <div className="space-y-4">
-                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-950 space-y-1">
-                  <p className="font-bold">Sauvegarde auto activée ✓</p>
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-950 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold">Sauvegarde auto activée ✓</p>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${
+                        isPro
+                          ? 'bg-amber-400 text-amber-950'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {isPro ? <Crown className="h-2.5 w-2.5" /> : null}
+                      {isPro ? 'Pro' : 'Gratuit'}
+                    </span>
+                  </div>
                   <p className="font-semibold text-indigo-700 break-all">{user.email}</p>
                   <p className="text-[11px] text-slate-500 pt-1">
                     Vos {leaves.length} jours posés et vos soldes ({formatFrNumber(cpRemaining)} CP · {formatFrNumber(rttRemaining)} RTT) sont synchronisés automatiquement dans le cloud.
@@ -3537,6 +3655,24 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <PaywallModal
+        isOpen={paywallFeature !== null}
+        feature={paywallFeature ?? ''}
+        onClose={() => setPaywallFeature(null)}
+        onTestUpgrade={import.meta.env.DEV ? () => void handleSetProStatus(true) : undefined}
+      />
+
+      <ExportCalendarModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        isPro={isPro}
+        leaves={leaves}
+        year={selectedYear}
+        user={user}
+        onUpgrade={() => void handleSetProStatus(true)}
+        quotas={{ cp: quotas.cp, rtt: quotas.rtt }}
+      />
 
     </div>
   );

@@ -29,12 +29,14 @@ function loadAdsenseScript(client: string) {
 type AdBannerProps = {
   isPro: boolean;
   onUpgrade?: () => void;
+  variant?: 'in-feed' | 'compact';
 };
 
-export function AdBanner({ isPro, onUpgrade }: AdBannerProps) {
+export function AdBanner({ isPro, onUpgrade, variant = 'in-feed' }: AdBannerProps) {
   const adRef = useRef<HTMLModElement | null>(null);
   const adClient = import.meta.env.VITE_ADSENSE_CLIENT;
   const adSlot = import.meta.env.VITE_ADSENSE_SLOT;
+  const reservedHeight = variant === 'compact' ? 'min-h-[76px]' : 'min-h-24';
 
   useEffect(() => {
     if (isPro || import.meta.env.DEV || !adClient || !adSlot) return;
@@ -61,7 +63,9 @@ export function AdBanner({ isPro, onUpgrade }: AdBannerProps) {
     return (
       <aside
         aria-label="Espace publicitaire de test"
-        className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 px-4 py-3 text-center sm:flex-row sm:text-left"
+        className={`flex flex-col items-center justify-between gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 px-4 ${
+          variant === 'compact' ? 'min-h-[76px] py-2' : 'min-h-24 py-3'
+        } text-center sm:flex-row sm:text-left`}
       >
         <div>
           <p className="text-xs font-extrabold text-indigo-900">
@@ -89,11 +93,11 @@ export function AdBanner({ isPro, onUpgrade }: AdBannerProps) {
   return (
     <aside
       aria-label="Publicité"
-      className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm"
+      className={`overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm ${reservedHeight}`}
     >
       <ins
         ref={adRef}
-        className="adsbygoogle block min-h-24 w-full"
+        className={`adsbygoogle block w-full ${reservedHeight}`}
         style={{ display: 'block' }}
         data-ad-client={adClient}
         data-ad-slot={adSlot}
