@@ -1540,9 +1540,9 @@ export default function App() {
       }}
       className="min-h-screen bg-slate-50 text-slate-900 flex flex-col"
     >
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 min-h-16 flex items-center justify-between gap-3 shadow-xs">
-        <div className="flex min-w-0 items-center gap-3">
-          <img src="/icon-192.png" alt="Fly Calendar Logo" className="w-10 h-10 rounded-2xl shadow-md shadow-emerald-500/20 object-cover" />
+      <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-3 shadow-xs backdrop-blur-md sm:gap-3 sm:px-8">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <img src="/icon-192.png" alt="Fly Calendar Logo" className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-md shadow-emerald-500/20" />
           <div className="min-w-0">
             <a href="#top" className="text-lg font-extrabold tracking-tight text-emerald-700">
               JoursOff
@@ -1555,12 +1555,12 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {!isInstalled && isInstallable && (
             <button
               type="button"
               onClick={() => void install()}
-              className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+              className="hidden items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 sm:flex"
             >
               <Download className="h-4 w-4" />
               <span>Installer l&apos;app</span>
@@ -1585,7 +1585,7 @@ export default function App() {
             onClick={openProfileSettings}
             aria-label={isSyncing ? 'Synchronisation en cours' : user ? 'Sauvegarde automatique active' : 'Données enregistrées sur cet appareil'}
             title={user ? 'Sauvegarde auto' : 'Sauvegarde locale'}
-            className="p-2 rounded-xl hover:bg-slate-100 cursor-pointer"
+            className="rounded-xl p-2 hover:bg-slate-100"
           >
             {isSyncing ? (
               <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
@@ -1599,18 +1599,20 @@ export default function App() {
             type="button"
             onClick={() => setIsExportModalOpen(true)}
             data-tour="export"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+            aria-label="Exporter"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 sm:px-3"
           >
             <Download className="h-4 w-4 text-emerald-600" />
-            Exporter
+            <span className="hidden sm:inline">Exporter</span>
           </button>
           <button
+            type="button"
             onClick={openNewLeaveModal}
-            className="px-3 sm:px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors whitespace-nowrap flex items-center gap-1.5 cursor-pointer shadow-xs"
+            aria-label="Poser un jour off"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 sm:px-4"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Poser un jour off</span>
-            <span className="sm:hidden">Poser un jour</span>
           </button>
         </div>
       </header>

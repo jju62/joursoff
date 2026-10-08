@@ -37,21 +37,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsProState(value);
   }, []);
 
-  const ensureProfileExists = useCallback(async (currentUser: User) => {
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: currentUser.id }, { onConflict: 'id' });
-    if (error) throw error;
-  }, []);
-
   const loadProfile = useCallback(async (currentUser: User | null, requestGeneration: number) => {
     if (!currentUser) {
       updateIsPro(false);
       setHasCompletedOnboarding(false);
       return;
     }
-
-    await ensureProfileExists(currentUser);
 
     const { data, error } = await supabase
       .from('profiles')
@@ -62,7 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (generation.current !== requestGeneration) return;
     updateIsPro(data?.is_pro === true);
     setHasCompletedOnboarding(data?.has_completed_onboarding === true);
-  }, [ensureProfileExists, updateIsPro]);
+  }, [updateIsPro]);
 
   useEffect(() => {
     let active = true;
