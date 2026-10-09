@@ -4,6 +4,7 @@ export type DestinationSeason = 'printemps' | 'ete' | 'automne' | 'hiver';
 export type Destination = {
   name: string;
   region: string;
+  scene: 'coast' | 'lake' | 'mountains' | 'historic' | 'old-town' | 'city';
   latitude: number;
   longitude: number;
   types: DestinationType[];
@@ -16,6 +17,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Saint-Malo',
     region: 'Bretagne',
+    scene: 'coast',
     latitude: 48.6493,
     longitude: -2.0257,
     types: ['Mer', 'Nature'],
@@ -26,6 +28,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Biarritz',
     region: 'Pays basque',
+    scene: 'coast',
     latitude: 43.4832,
     longitude: -1.5586,
     types: ['Mer', 'Gastronomie'],
@@ -39,6 +42,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Annecy',
     region: 'Alpes',
+    scene: 'lake',
     latitude: 45.8992,
     longitude: 6.1294,
     types: ['Nature', 'Culture'],
@@ -49,6 +53,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Gorges du Verdon',
     region: 'Provence',
+    scene: 'mountains',
     latitude: 43.7497,
     longitude: 6.3286,
     types: ['Nature'],
@@ -59,6 +64,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Avignon',
     region: 'Provence',
+    scene: 'historic',
     latitude: 43.9493,
     longitude: 4.8055,
     types: ['Culture', 'Gastronomie'],
@@ -69,6 +75,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Dijon',
     region: 'Bourgogne',
+    scene: 'old-town',
     latitude: 47.322,
     longitude: 5.0415,
     types: ['Culture', 'Gastronomie'],
@@ -79,6 +86,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Strasbourg',
     region: 'Alsace',
+    scene: 'historic',
     latitude: 48.5734,
     longitude: 7.7521,
     types: ['Culture', 'Gastronomie'],
@@ -89,6 +97,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Colmar',
     region: 'Alsace',
+    scene: 'old-town',
     latitude: 48.0794,
     longitude: 7.3585,
     types: ['Culture', 'Gastronomie'],
@@ -99,6 +108,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Marseille',
     region: 'Provence',
+    scene: 'coast',
     latitude: 43.2965,
     longitude: 5.3698,
     types: ['Mer', 'Nature', 'Gastronomie'],
@@ -109,6 +119,7 @@ export const DESTINATIONS: Destination[] = [
   {
     name: 'Bordeaux',
     region: 'Nouvelle-Aquitaine',
+    scene: 'city',
     latitude: 44.8378,
     longitude: -0.5792,
     types: ['Culture', 'Gastronomie'],

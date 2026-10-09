@@ -36,7 +36,7 @@ export function PaywallModal({ isOpen, feature, onClose, onTestUpgrade }: Paywal
           <div className="mb-4 inline-flex rounded-2xl bg-amber-400 p-3 text-amber-950 shadow-lg">
             <Crown className="h-6 w-6 fill-amber-500" />
           </div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-200">JoursOff Pro</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-200">CongésZen Pro</p>
           <h2 id="paywall-title" className="mt-1 text-2xl font-black">Débloquez {feature}</h2>
           <p className="mt-2 text-sm leading-relaxed text-indigo-100">
             Personnalisez votre expérience et profitez de toutes les options réservées aux membres Pro.

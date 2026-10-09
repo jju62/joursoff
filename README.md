@@ -2,7 +2,7 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# CongésZen
 
 This contains everything you need to run your app locally.
 https://ai.studio/apps/9f9146b0-5433-4d00-9cee-a6d0f4764ab5
@@ -26,6 +26,10 @@ to the Supabase project (for example, through the Supabase SQL Editor or the Sup
 It creates the `user_relationships` table, participant-only RLS, and authenticated RPC
 functions for creating/redeeming invitations, reading the linked calendar, and unlinking.
 
+Apply [`supabase/migrations/20261009150000_congeszen_invitation_codes.sql`](./supabase/migrations/20261009150000_congeszen_invitation_codes.sql)
+to issue new Duo invitations with the `ZEN-` prefix and group invitations with `ZEN-GRP-`.
+Previously issued invitation codes remain valid.
+
 The shared-calendar RPC returns only leave dates, leave types, and half-day periods; it
 does not return leave labels, account email addresses, or CP/RTT balances.
 
@@ -48,8 +52,12 @@ aucun script publicitaire n’est chargé. En développement, une bannière de t
 basculeur Gratuit/Pro sont disponibles dans les paramètres du profil.
 
 Le compte gratuit reçoit les prévisions jusqu’à J+3 et une idée générique d’escapade.
-Le compte Pro reçoit les prévisions jusqu’à J+7, trois suggestions filtrables et les
-normales climatiques mensuelles calculées à partir des archives Open-Meteo (1991–2020).
+Le compte Pro reçoit les prévisions jusqu’à J+7, trois suggestions filtrables illustrées
+par des scènes locales et les normales climatiques mensuelles calculées à partir des
+archives Open-Meteo (1991–2020). Sur mobile, l’ouverture d’une escapade dans une carte
+de pont repositionne le contenu sous l’en-tête pour garder son titre visible. Le panneau
+d’escapade du formulaire de congé reste replié par défaut ; les marchés de Noël de
+Strasbourg et Colmar ont une illustration hivernale dédiée.
 Les thèmes Indigo et Émeraude sont gratuits ; OLED, Pastel et Saisonnier sont réservés
 à Pro.
 Le partage Duo est gratuit : la vue superposée différencie les congés de chaque personne

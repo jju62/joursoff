@@ -211,7 +211,7 @@ export function OnboardingWizard({ initialCity = '', onComplete }: OnboardingWiz
             <div className="flex items-center gap-3">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl shadow-inner">🧭</span>
               <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-indigo-200">JoursOff · Bien démarrer</p>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-indigo-200">CongésZen · Bien démarrer</p>
                 <h1 id="onboarding-title" className="mt-0.5 text-xl font-black tracking-tight sm:text-2xl">
                   {step === 3 ? 'Votre récapitulatif' : ['Bienvenue !', 'Vos congés payés', 'Vos RTT'][step]}
                 </h1>

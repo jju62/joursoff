@@ -14,10 +14,10 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
-          name: 'JoursOff — Congés, RTT & Optimiseur de Ponts 2026',
-          short_name: 'JoursOff',
+          name: 'CongésZen — Congés, RTT & Optimiseur de Ponts',
+          short_name: 'CongésZen',
           description:
-            'Application PWA de suivi de congés payés, RTT et optimisation automatique des ponts 2026.',
+            'CongésZen simplifie le suivi des congés payés et RTT et aide à optimiser les ponts et jours fériés.',
           theme_color: '#10b981',
           background_color: '#f8fafc',
           display: 'standalone',

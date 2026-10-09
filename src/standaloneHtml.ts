@@ -3,7 +3,7 @@ export const STANDALONE_HTML_CODE = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JoursOff — Mon suivi de congés & RTT 2026</title>
+  <title>CongésZen — Mon suivi de congés & RTT</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- SDK JS Supabase v2 CDN -->
@@ -19,7 +19,7 @@ export const STANDALONE_HTML_CODE = `<!DOCTYPE html>
     <div>
       <h1 class="text-2xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
         <i data-lucide="calendar-check-2" class="w-6 h-6 text-indigo-600"></i>
-        JoursOff
+        CongésZen
       </h1>
       <p class="text-xs text-slate-500 font-medium mt-0.5">Mes congés, RTT & ponts 2026 sous contrôle</p>
     </div>

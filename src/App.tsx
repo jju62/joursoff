@@ -73,6 +73,7 @@ import {
 } from './groupService';
 import { useAuth } from './context/AuthContext';
 import { ProTestAccessButton } from './ProTestAccessButton';
+import { TravelArtwork } from './components/TravelArtwork';
 import { ExportCalendarModal } from './components/ExportCalendarModal';
 import { PaywallModal } from './components/PaywallModal';
 import { AppTour } from './components/AppTour';
@@ -1467,6 +1468,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeView !== 'calendar') return;
+    if (window.matchMedia('(max-width: 639px)').matches) return;
     const timeout = window.setTimeout(() => {
       const container = calendarMonthsContainerRef.current;
       const month = currentCalendarMonthRef.current;
@@ -1549,10 +1551,10 @@ export default function App() {
     >
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-3 shadow-xs backdrop-blur-md sm:gap-3 sm:px-8">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <img src="/icon-192.png" alt="Fly Calendar Logo" className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-md shadow-emerald-500/20" />
+          <img src="/icon-192.png" alt="Logo CongésZen" className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-md shadow-emerald-500/20" />
           <div className="min-w-0">
             <a href="#top" className="text-lg font-extrabold tracking-tight text-emerald-700">
-              JoursOff
+              CongésZen
             </a>
             {user && profile.name.trim() && (
               <p className="truncate text-xs text-slate-500">
@@ -1754,7 +1756,7 @@ export default function App() {
                 </label>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />CP posé</span>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />RTT posé</span>
-                {partnerCalendar && (
+                {partnerCalendar && (calendarViewMode === 'partner' || (calendarViewMode === 'duo' && showPartnerInDuo)) && (
                   <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />{partnerCalendar.partnerName}</span>
                 )}
                 {calendarViewMode === 'duo' && partnerCalendar && (
@@ -1768,7 +1770,7 @@ export default function App() {
                     Afficher les congés de {partnerCalendar.partnerName}
                   </label>
                 )}
-                {partnerCalendar && (
+                {calendarViewMode === 'duo' && showPartnerInDuo && partnerCalendar && (
                   <span className="rounded-full bg-gradient-to-r from-emerald-50 to-fuchsia-50 px-2.5 py-1 font-bold text-fuchsia-700">
                     🏖️ Repos partagé
                   </span>
@@ -1903,7 +1905,7 @@ export default function App() {
               role="region"
               aria-label="Mois du calendrier"
               tabIndex={0}
-              className="max-h-[60dvh] overflow-y-auto overscroll-contain rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+              className="rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 sm:max-h-[60dvh] sm:overflow-y-auto sm:overscroll-contain"
             >
             <div className="grid grid-cols-1 gap-3 p-1 sm:grid-cols-2 xl:grid-cols-3">
               {calendarMonths.map((month) => {
@@ -2039,8 +2041,13 @@ export default function App() {
                             ) : calendarViewMode === 'group' ? (
                               <>
                                 <span className="block">{dayNumber}</span>
+                                {holiday && (
+                                  <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
+                                    {holiday.name}
+                                  </span>
+                                )}
                                 {groupDayMembers.length > 0 && (
-                                  <span className="absolute inset-x-0 bottom-0.5 flex items-center justify-center gap-0.5">
+                                  <span className="flex items-center justify-center gap-0.5">
                                     {groupDayMembers.slice(0, 3).map((member) => {
                                       const memberIndex = groupCalendar?.members.findIndex((item) => item.id === member.id) ?? 0;
                                       return (
@@ -2059,7 +2066,23 @@ export default function App() {
                                   </span>
                                 )}
                               </>
-                            ) : leave ? `${dayNumber} ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : dayNumber}
+                            ) : (
+                              <>
+                                <span className="block">
+                                  {dayNumber}{leave ? ` ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : ''}
+                                </span>
+                                {holiday && (
+                                  <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
+                                    {holiday.name}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                            {holiday && calendarViewMode === 'duo' && (
+                              <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
+                                {holiday.name}
+                              </span>
+                            )}
                             {forecast && (
                               <WeatherBadge
                                 code={forecast.code}
@@ -2649,6 +2672,12 @@ export default function App() {
                           Poser le {bridge.bridgeLabel}
                         </p>
 
+                        <TravelArtwork
+                          scene="bridge"
+                          label={`Week-end prolongé · ${bridge.totalOffDays} jours`}
+                          className="mt-3"
+                        />
+
                         {/* Visual Day Strip */}
                         <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 mt-3">
                           {bridge.timeline.map((slot) => (
@@ -2864,7 +2893,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <Cloud className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-extrabold text-slate-900 text-lg">
-                  {user ? 'Mon compte' : 'Bienvenue sur JoursOff'}
+                  {user ? 'Mon compte' : 'Bienvenue sur CongésZen'}
                 </h3>
               </div>
               {user && (
@@ -3079,7 +3108,7 @@ export default function App() {
                           maxLength={13}
                           value={duoInviteInput}
                           onChange={(event) => setDuoInviteInput(event.target.value.toUpperCase())}
-                          placeholder="JOURSOFF-88A2"
+                          placeholder="ZEN-88A2"
                           disabled={duoBusy}
                           className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm font-bold tracking-wide text-slate-800 placeholder:font-medium placeholder:tracking-normal"
                         />
@@ -3181,7 +3210,7 @@ export default function App() {
                       maxLength={24}
                       value={groupInviteInput}
                       onChange={(event) => setGroupInviteInput(event.target.value.toUpperCase())}
-                      placeholder="JOURSOFF-GRP-…"
+                      placeholder="ZEN-GRP-AB12CD34"
                       aria-label="Code d’invitation au groupe"
                       className="min-w-0 flex-1 rounded-xl border border-violet-100 bg-white p-2.5 text-xs tracking-wide text-slate-800"
                     />
@@ -3755,7 +3784,7 @@ export default function App() {
                   )}
                 </div>
               )}
-              <EscapadesPanel date={formDate} isPro={isPro} />
+              <EscapadesPanel date={formDate} isPro={isPro} collapsed />
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">

@@ -65,7 +65,7 @@ function buildIcsContent(leaves: LeaveItem[]) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//JoursOff//FR//EN',
+    'PRODID:-//CongesZen//FR//EN',
     'CALSCALE:GREGORIAN',
   ];
 
@@ -234,7 +234,7 @@ export function ExportCalendarModal({
       pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(23);
-      pdf.text('JoursOff', 18, 19);
+      pdf.text('CongésZen', 18, 19);
       pdf.setFontSize(15);
       pdf.text(`Bilan annuel des congés ${year}`, 18, 31);
       pdf.setFont('helvetica', 'normal');
@@ -318,8 +318,8 @@ export function ExportCalendarModal({
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8);
       pdf.setTextColor(148, 163, 184);
-      pdf.text(`JoursOff - ${year}`, 18, 289);
-      pdf.save(`joursoff-bilan-${year}.pdf`);
+      pdf.text(`CongésZen - ${year}`, 18, 289);
+      pdf.save(`congeszen-bilan-${year}.pdf`);
     } catch (error) {
       setExportError(error instanceof Error ? `Export PDF impossible : ${error.message}` : 'Export PDF impossible.');
     } finally {
@@ -332,7 +332,7 @@ export function ExportCalendarModal({
     setExporting(true);
     try {
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'JoursOff';
+      workbook.creator = 'CongésZen';
       workbook.created = new Date();
       workbook.modified = new Date();
 
@@ -345,7 +345,7 @@ export function ExportCalendarModal({
         { width: 18 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 },
       ];
       summarySheet.mergeCells('A1:H1');
-      summarySheet.getCell('A1').value = `JoursOff - Bilan annuel ${year}`;
+      summarySheet.getCell('A1').value = `CongésZen - Bilan annuel ${year}`;
       summarySheet.getCell('A1').font = { name: 'Aptos Display', size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
       summarySheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
       summarySheet.getRow(1).height = 38;
@@ -476,7 +476,7 @@ export function ExportCalendarModal({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `joursoff-conges-${year}.xlsx`;
+      anchor.download = `congeszen-conges-${year}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -489,11 +489,11 @@ export function ExportCalendarModal({
   };
 
   const handleExportIcs = () => {
-    downloadBlob('joursoff-conges.ics', buildIcsContent(leaves), 'text/calendar;charset=utf-8');
+    downloadBlob('congeszen-conges.ics', buildIcsContent(leaves), 'text/calendar;charset=utf-8');
   };
 
   const handleExportCsv = () => {
-    downloadBlob('joursoff-conges.csv', buildCsvContent(leaves), 'text/csv;charset=utf-8');
+    downloadBlob('congeszen-conges.csv', buildCsvContent(leaves), 'text/csv;charset=utf-8');
   };
 
   const handleCopyDynamicLink = async () => {

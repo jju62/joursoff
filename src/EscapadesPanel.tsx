@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Crown, MapPin, Sun } from 'lucide-react';
+import { TravelArtwork } from './components/TravelArtwork';
 import {
   DESTINATIONS,
   DestinationSeason,
@@ -40,6 +41,9 @@ function daysUntil(date: string) {
 
 export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPanelProps) {
   const [expanded, setExpanded] = useState(!collapsed);
+  const sectionRef = useRef<HTMLElement>(null);
+  const shouldScrollIntoViewRef = useRef(false);
+  const panelId = useId();
   const [seasonFilter, setSeasonFilter] = useState<DestinationSeason | 'toutes'>('toutes');
   const [typeFilter, setTypeFilter] = useState<DestinationType | 'Toutes'>('Toutes');
   const [eventsOnly, setEventsOnly] = useState(false);
@@ -100,12 +104,34 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
   const eventsThisMonth = (destination: typeof DESTINATIONS[number]) =>
     destination.events.filter((event) => event.months.includes(month));
 
+  useEffect(() => {
+    if (!expanded || !shouldScrollIntoViewRef.current) return;
+    shouldScrollIntoViewRef.current = false;
+    if (!collapsed || !window.matchMedia('(max-width: 639px)').matches) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const section = sectionRef.current;
+      if (!section) return;
+      const rect = section.getBoundingClientRect();
+      const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0;
+      const scrollOffset = rect.top - headerHeight - 12;
+      if (rect.top < headerHeight || rect.bottom > window.innerHeight - 80) {
+        window.scrollBy({ top: scrollOffset, behavior: 'smooth' });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [collapsed, expanded]);
+
   return (
-    <section className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+    <section ref={sectionRef} className="mt-3 scroll-mt-20 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
+        aria-controls={panelId}
+        onClick={() => setExpanded((current) => {
+          if (!current) shouldScrollIntoViewRef.current = true;
+          return !current;
+        })}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <span className="flex items-center gap-2 text-[11px] font-extrabold text-indigo-900">
@@ -116,7 +142,7 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-3">
+        <div id={panelId} className="mt-3 space-y-3">
           {!isPro ? (
             <div className="rounded-lg bg-white p-2.5">
               <p className="text-[11px] font-extrabold text-slate-800">Une idée d’escapade en France</p>
@@ -175,13 +201,19 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
                     const normalKey = `${destination.name}:${month}`;
                     const destinationNormals = normals[normalKey];
                     const events = eventsThisMonth(destination);
+                    const hasChristmasMarket = events.some((event) => event.name.toLocaleLowerCase('fr-FR').includes('noël'));
                     return (
-                      <article key={destination.name} className="rounded-lg bg-white p-2.5">
-                        <h4 className="text-[11px] font-extrabold text-slate-800">
+                      <article key={destination.name} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
+                        <TravelArtwork
+                          scene={hasChristmasMarket ? 'christmas' : destination.scene}
+                          label={hasChristmasMarket ? `${destination.name} · marchés de Noël` : destination.name}
+                        />
+                        <div className="p-3">
+                        <h4 className="text-xs font-extrabold text-slate-800">
                           {destination.name}
                           <span className="ml-1 font-medium text-slate-500">· {destination.region}</span>
                         </h4>
-                        <p className="mt-0.5 text-[10px] text-slate-600">{destination.idea}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{destination.idea}</p>
                         {events.length > 0 ? (
                           <p className="mt-1 text-[10px] font-semibold text-amber-700">
                             À découvrir : {events.map((event) => event.name).join(', ')}
@@ -207,6 +239,7 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
                             )}
                           </div>
                         )}
+                        </div>
                       </article>
                     );
                   })}
