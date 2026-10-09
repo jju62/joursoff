@@ -1516,6 +1516,19 @@ export default function App() {
     { value: 'autumn', label: 'Autumn', icon: Leaf, premium: true },
     { value: 'abstract', label: 'Abstract', icon: Sparkles, premium: true },
   ];
+  const calendarViewOptions = [
+    { id: 'mine', label: 'Moi', description: 'Mon calendrier', icon: CalendarDays },
+    ...(partnerCalendar ? [
+      { id: 'partner', label: 'Partenaire', description: `Calendrier de ${partnerCalendar.partnerName}`, icon: UserRound },
+      { id: 'duo', label: 'Duo', description: 'Vue superposée', icon: UsersRound },
+    ] : []),
+    ...(isPro ? calendarGroups.map((group) => ({
+      id: `group:${group.id}`,
+      label: group.name,
+      description: `Groupe ${group.name}`,
+      icon: UsersRound,
+    })) : []),
+  ];
   const storedDepartureCity = user?.user_metadata.departure_city;
   const onboardingInitialCity = profile.departureCity?.name.split(',')[0] ??
     (storedDepartureCity &&
@@ -1728,32 +1741,48 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 shadow-sm">
-                  <span className="sr-only">Vue du calendrier</span>
-                  <select
+                <div className="w-full min-w-0 sm:w-auto">
+                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400 sm:sr-only">
+                    Affichage du calendrier
+                  </span>
+                  <div
+                    role="group"
                     aria-label="Vue du calendrier"
-                    value={calendarViewMode === 'group' ? `group:${selectedGroupId}` : calendarViewMode}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (value.startsWith('group:')) {
-                        setSelectedGroupId(value.slice('group:'.length));
-                        setCalendarViewMode('group');
-                      } else {
-                        setCalendarViewMode(value as 'mine' | 'partner' | 'duo');
-                      }
-                    }}
-                    className="max-w-48 bg-transparent font-bold text-slate-700 focus:outline-none"
+                    className="flex w-full max-w-full snap-x gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100/80 p-1 shadow-inner sm:w-auto"
                   >
-                    <option value="mine">Mon calendrier</option>
-                    <option value="partner" disabled={!partnerCalendar}>
-                      Calendrier de {partnerCalendar?.partnerName ?? 'mon partenaire'}
-                    </option>
-                    <option value="duo" disabled={!partnerCalendar}>Vue Duo / Superposée</option>
-                    {isPro && calendarGroups.map((group) => (
-                      <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
-                    ))}
-                  </select>
-                </label>
+                    {calendarViewOptions.map((option) => {
+                      const Icon = option.icon;
+                      const isSelected = option.id.startsWith('group:')
+                        ? calendarViewMode === 'group' && selectedGroupId === option.id.slice('group:'.length)
+                        : calendarViewMode === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-label={option.description}
+                          aria-pressed={isSelected}
+                          title={option.description}
+                          onClick={() => {
+                            if (option.id.startsWith('group:')) {
+                              setSelectedGroupId(option.id.slice('group:'.length));
+                              setCalendarViewMode('group');
+                            } else {
+                              setCalendarViewMode(option.id as 'mine' | 'partner' | 'duo');
+                            }
+                          }}
+                          className={`flex min-h-10 shrink-0 snap-start items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition ${
+                            isSelected
+                              ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200'
+                              : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="max-w-32 truncate">{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />CP posé</span>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />RTT posé</span>
                 {partnerCalendar && (calendarViewMode === 'partner' || (calendarViewMode === 'duo' && showPartnerInDuo)) && (

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Crown, MapPin, Sun } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Crown, MapPin, Sun, X } from 'lucide-react';
 import { TravelArtwork } from './components/TravelArtwork';
 import {
   DESTINATIONS,
@@ -41,8 +42,6 @@ function daysUntil(date: string) {
 
 export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPanelProps) {
   const [expanded, setExpanded] = useState(!collapsed);
-  const sectionRef = useRef<HTMLElement>(null);
-  const shouldScrollIntoViewRef = useRef(false);
   const panelId = useId();
   const [seasonFilter, setSeasonFilter] = useState<DestinationSeason | 'toutes'>('toutes');
   const [typeFilter, setTypeFilter] = useState<DestinationType | 'Toutes'>('Toutes');
@@ -105,27 +104,165 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
     destination.events.filter((event) => event.months.includes(month));
 
   useEffect(() => {
-    if (!expanded || !shouldScrollIntoViewRef.current) return;
-    shouldScrollIntoViewRef.current = false;
-    if (!collapsed || !window.matchMedia('(max-width: 639px)').matches) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    if (!collapsed || !expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [collapsed, expanded]);
 
+  const content = expanded && (
+    <div
+      id={panelId}
+      className={`mt-3 space-y-3 ${
+        collapsed
+          ? 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 pb-5 pt-1 [-webkit-overflow-scrolling:touch] sm:px-6'
+          : ''
+      }`}
+    >
+      {!isPro ? (
+        <div className="rounded-lg bg-white p-2.5">
+          <p className="text-[11px] font-extrabold text-slate-800">Une idée d’escapade en France</p>
+          <p className="mt-0.5 text-[10px] text-slate-500">
+            Une balade au grand air suivie d’une découverte gourmande. Passez Pro pour découvrir les lieux, détails et événements du moment.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 rounded-xl bg-white p-3">
+            <label className="block text-[11px] font-semibold text-slate-600">
+              Saison
+              <select
+                value={seasonFilter}
+                onChange={(event) => setSeasonFilter(event.target.value as typeof seasonFilter)}
+                className="ml-2 rounded-lg border border-indigo-100 bg-white px-2 py-1.5 text-[11px]"
+              >
+                {SEASONS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={typeFilter === type}
+                  onClick={() => setTypeFilter(type)}
+                  className={`rounded-full px-2.5 py-1.5 text-[10px] font-bold ${
+                    typeFilter === type ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={eventsOnly}
+                onChange={(event) => setEventsOnly(event.target.checked)}
+                className="h-4 w-4 accent-indigo-600"
+              />
+              Événement ce mois-ci
+            </label>
+          </div>
+
+          {destinations.length === 0 ? (
+            <p className="rounded-lg bg-white p-3 text-[11px] text-slate-600">
+              Aucune destination ne correspond à ces filtres pour cette période.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {destinations.map((destination) => {
+                const normalKey = `${destination.name}:${month}`;
+                const destinationNormals = normals[normalKey];
+                const events = eventsThisMonth(destination);
+                const hasChristmasMarket = events.some((event) => event.name.toLocaleLowerCase('fr-FR').includes('noël'));
+                return (
+                  <article key={destination.name} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
+                    <TravelArtwork
+                      scene={hasChristmasMarket ? 'christmas' : destination.scene}
+                      label={hasChristmasMarket ? `${destination.name} · marchés de Noël` : destination.name}
+                    />
+                    <div className="p-3">
+                      <h4 className="text-xs font-extrabold text-slate-800">
+                        {destination.name}
+                        <span className="ml-1 font-medium text-slate-500">· {destination.region}</span>
+                      </h4>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{destination.idea}</p>
+                      {events.length > 0 ? (
+                        <p className="mt-1 text-[10px] font-semibold text-amber-700">
+                          À découvrir : {events.map((event) => event.name).join(', ')}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[10px] text-slate-500">Période favorable : {season}.</p>
+                      )}
+                      {needsSeasonalNormals && (
+                        <div className="mt-2 rounded-lg bg-sky-50 px-2 py-1.5 text-[10px] text-sky-900">
+                          <p className="font-bold">Normales de saison · {monthLabel}</p>
+                          {destinationNormals ? (
+                            <p className="mt-0.5 flex items-center gap-1">
+                              <Sun className="h-3 w-3" />
+                              {destinationNormals.averageMinimum.toFixed(1)}° / {destinationNormals.averageMaximum.toFixed(1)}° ·
+                              {' '}{destinationNormals.averageSunshineHours.toFixed(1)} h de soleil/jour
+                            </p>
+                          ) : normalErrors[normalKey] ? (
+                            <p role="status" className="mt-0.5 text-red-700">{normalErrors[normalKey]}</p>
+                          ) : (
+                            <p role="status" className="mt-0.5">
+                              {loadingNormals ? 'Chargement des moyennes historiques…' : 'Normales indisponibles.'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {needsSeasonalNormals && (
+        <div className="relative overflow-hidden rounded-lg border border-sky-100 bg-white p-2.5">
+          <div className={!isPro ? 'select-none blur-sm' : ''} aria-hidden={!isPro}>
+            <p className="flex items-center gap-1 text-[10px] font-extrabold text-sky-900">
+              <Sun className="h-3 w-3" />
+              Normales de saison
+            </p>
+            <p className="mt-0.5 text-[10px] text-sky-800">
+              Températures min/max moyennes et ensoleillement moyen du mois ciblé.
+            </p>
+          </div>
+          {!isPro && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/70 px-3 text-center">
+              <p className="flex items-center gap-1 text-[10px] font-extrabold text-indigo-800">
+                <Crown className="h-3.5 w-3.5 shrink-0" />
+                Passez Pro pour débloquer les normales de saison
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <section ref={sectionRef} className="mt-3 scroll-mt-20 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+    <section className="mt-3">
       <button
         type="button"
         aria-expanded={expanded}
         aria-controls={panelId}
-        onClick={() => setExpanded((current) => {
-          if (!current) shouldScrollIntoViewRef.current = true;
-          return !current;
-        })}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-3 text-left transition hover:bg-indigo-50"
       >
         <span className="flex items-center gap-2 text-[11px] font-extrabold text-indigo-900">
           <MapPin className="h-3.5 w-3.5" />
@@ -134,140 +271,42 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
         <span className="text-[10px] font-bold text-indigo-700">{expanded ? 'Réduire' : 'Découvrir'}</span>
       </button>
 
-      {expanded && (
+      {!collapsed && content}
+      {collapsed && expanded && createPortal(
         <div
-          id={panelId}
-          className={`mt-3 space-y-3 ${
-            collapsed ? 'max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible' : ''
-          }`}
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-6"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setExpanded(false);
+          }}
         >
-          {!isPro ? (
-            <div className="rounded-lg bg-white p-2.5">
-              <p className="text-[11px] font-extrabold text-slate-800">Une idée d’escapade en France</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Une balade au grand air suivie d’une découverte gourmande. Passez Pro pour découvrir les lieux, détails et événements du moment.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <label className="block text-[10px] font-semibold text-slate-600">
-                  Saison
-                  <select
-                    value={seasonFilter}
-                    onChange={(event) => setSeasonFilter(event.target.value as typeof seasonFilter)}
-                    className="ml-2 rounded-lg border border-indigo-100 bg-white px-2 py-1 text-[10px]"
-                  >
-                    {SEASONS.map((item) => (
-                      <option key={item.value} value={item.value}>{item.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex flex-wrap gap-1">
-                  {TYPES.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      aria-pressed={typeFilter === type}
-                      onClick={() => setTypeFilter(type)}
-                      className={`rounded-full px-2 py-1 text-[9px] font-bold ${
-                        typeFilter === type ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-                <label className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={eventsOnly}
-                    onChange={(event) => setEventsOnly(event.target.checked)}
-                    className="accent-indigo-600"
-                  />
-                  Événement ce mois-ci
-                </label>
-              </div>
-
-              {destinations.length === 0 ? (
-                <p className="rounded-lg bg-white p-2.5 text-[10px] text-slate-600">
-                  Aucune destination ne correspond à ces filtres pour cette période.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {destinations.map((destination) => {
-                    const normalKey = `${destination.name}:${month}`;
-                    const destinationNormals = normals[normalKey];
-                    const events = eventsThisMonth(destination);
-                    const hasChristmasMarket = events.some((event) => event.name.toLocaleLowerCase('fr-FR').includes('noël'));
-                    return (
-                      <article key={destination.name} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
-                        <TravelArtwork
-                          scene={hasChristmasMarket ? 'christmas' : destination.scene}
-                          label={hasChristmasMarket ? `${destination.name} · marchés de Noël` : destination.name}
-                        />
-                        <div className="p-3">
-                        <h4 className="text-xs font-extrabold text-slate-800">
-                          {destination.name}
-                          <span className="ml-1 font-medium text-slate-500">· {destination.region}</span>
-                        </h4>
-                        <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{destination.idea}</p>
-                        {events.length > 0 ? (
-                          <p className="mt-1 text-[10px] font-semibold text-amber-700">
-                            À découvrir : {events.map((event) => event.name).join(', ')}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-[10px] text-slate-500">Période favorable : {season}.</p>
-                        )}
-                        {needsSeasonalNormals && (
-                          <div className="mt-2 rounded-lg bg-sky-50 px-2 py-1.5 text-[10px] text-sky-900">
-                            <p className="font-bold">Normales de saison · {monthLabel}</p>
-                            {destinationNormals ? (
-                              <p className="mt-0.5 flex items-center gap-1">
-                                <Sun className="h-3 w-3" />
-                                {destinationNormals.averageMinimum.toFixed(1)}° / {destinationNormals.averageMaximum.toFixed(1)}° ·
-                                {' '}{destinationNormals.averageSunshineHours.toFixed(1)} h de soleil/jour
-                              </p>
-                            ) : normalErrors[normalKey] ? (
-                              <p role="status" className="mt-0.5 text-red-700">{normalErrors[normalKey]}</p>
-                            ) : (
-                              <p role="status" className="mt-0.5">
-                                {loadingNormals ? 'Chargement des moyennes historiques…' : 'Normales indisponibles.'}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-
-          {needsSeasonalNormals && (
-            <div className="relative overflow-hidden rounded-lg border border-sky-100 bg-white p-2.5">
-              <div className={!isPro ? 'select-none blur-sm' : ''} aria-hidden={!isPro}>
-                <p className="flex items-center gap-1 text-[10px] font-extrabold text-sky-900">
-                  <Sun className="h-3 w-3" />
-                  Normales de saison
-                </p>
-                <p className="mt-0.5 text-[10px] text-sky-800">
-                  Températures min/max moyennes et ensoleillement moyen du mois ciblé.
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${panelId}-title`}
+            className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-2xl sm:max-w-xl sm:rounded-3xl"
+          >
+            <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <div>
+                <h2 id={`${panelId}-title`} className="text-sm font-extrabold text-slate-900">
+                  Escapades &amp; ponts
+                </h2>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Idées pour {monthLabel} · {date.slice(0, 4)}
                 </p>
               </div>
-              {!isPro && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/70 px-3 text-center">
-                  <p className="flex items-center gap-1 text-[10px] font-extrabold text-indigo-800">
-                    <Crown className="h-3.5 w-3.5 shrink-0" />
-                    Passez Pro pour débloquer les normales de saison
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                aria-label="Fermer les escapades"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            {content}
+          </section>
+        </div>,
+        document.body
       )}
     </section>
   );
