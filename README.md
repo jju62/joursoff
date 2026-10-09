@@ -35,8 +35,9 @@ Pour activer les groupes partagés, appliquez
 [`supabase/migrations/20261007100000_calendar_groups.sql`](./supabase/migrations/20261007100000_calendar_groups.sql)
 au projet Supabase. Les comptes Pro peuvent créer des groupes, inviter des membres
 avec un code réutilisable et filtrer les membres visibles dans le calendrier. Les
-calendriers de groupe restent en lecture seule et ne transmettent ni libellés, ni
-adresses email, ni soldes de congés.
+calendriers de groupe distinguent les membres sur les jours concernés et permettent
+d’afficher tout le monde, personne ou une sélection. Ils restent en lecture seule et
+ne transmettent ni libellés, ni adresses email, ni soldes de congés.
 
 ## Publicités
 
@@ -51,9 +52,9 @@ Le compte Pro reçoit les prévisions jusqu’à J+7, trois suggestions filtrabl
 normales climatiques mensuelles calculées à partir des archives Open-Meteo (1991–2020).
 Les thèmes Indigo et Émeraude sont gratuits ; OLED, Pastel et Saisonnier sont réservés
 à Pro.
-Le partage Duo est gratuit : consultation, actualisation et édition de son propre
-calendrier depuis la vue superposée. Les groupes de plus de deux personnes sont
-réservés à Pro.
+Le partage Duo est gratuit : la vue superposée différencie les congés de chaque personne
+et permet de masquer ou d’afficher ceux du partenaire, sans affecter l’édition de son
+propre calendrier. Les groupes de plus de deux personnes sont réservés à Pro.
 
 ## Statut Pro
 

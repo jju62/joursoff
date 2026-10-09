@@ -155,6 +155,16 @@ type Personalization = {
 };
 
 const FREE_AVATARS = ['👋', '😁', '😎', '🐱'];
+const GROUP_MEMBER_BADGE_COLORS = [
+  'bg-violet-600',
+  'bg-sky-600',
+  'bg-rose-600',
+  'bg-amber-600',
+  'bg-teal-600',
+  'bg-pink-600',
+  'bg-cyan-700',
+  'bg-orange-600',
+];
 const PRO_AVATARS = [
   '🐼', '🦊', '🌿', '🤔', '😴', '🤖', '🚀', '🌈', '🍎', '🍕', '🍦', '🐶',
   '🦉', '🐻', '👽', '🤡', '👻', '☠️', '🧡', '💜', '🔥', '⭐', '✨', '🎉',
@@ -226,6 +236,7 @@ export default function App() {
   const [duoBusy, setDuoBusy] = useState(false);
   const [duoError, setDuoError] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<'mine' | 'partner' | 'duo' | 'group'>('mine');
+  const [showPartnerInDuo, setShowPartnerInDuo] = useState(true);
   const [weatherByCity, setWeatherByCity] = useState<Record<string, DailyWeather[]>>({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -1746,6 +1757,17 @@ export default function App() {
                 {partnerCalendar && (
                   <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-fuchsia-400" />{partnerCalendar.partnerName}</span>
                 )}
+                {calendarViewMode === 'duo' && partnerCalendar && (
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-fuchsia-100 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={showPartnerInDuo}
+                      onChange={(event) => setShowPartnerInDuo(event.target.checked)}
+                      className="accent-fuchsia-500"
+                    />
+                    Afficher les congés de {partnerCalendar.partnerName}
+                  </label>
+                )}
                 {partnerCalendar && (
                   <span className="rounded-full bg-gradient-to-r from-emerald-50 to-fuchsia-50 px-2.5 py-1 font-bold text-fuchsia-700">
                     🏖️ Repos partagé
@@ -1755,22 +1777,55 @@ export default function App() {
               </div>
             </div>
             {calendarViewMode === 'group' && groupCalendar && (
-              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2">
-                {groupCalendar.members.map((member) => (
-                  <label key={member.id} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={visibleGroupMembers[member.id] ?? true}
-                      onChange={(event) => setVisibleGroupMembers((current) => ({
+              <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-extrabold text-slate-700">Personnes dont afficher les congés</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleGroupMembers((current) => ({
                         ...current,
-                        [member.id]: event.target.checked,
+                        ...Object.fromEntries(groupCalendar.members.map((member) => [member.id, true])),
                       }))}
-                      className="accent-violet-600"
-                    />
-                    <span aria-hidden="true">{member.avatar}</span>
-                    {member.name}
-                  </label>
-                ))}
+                      className="text-[10px] font-bold text-violet-700 underline underline-offset-2"
+                    >
+                      Tout afficher
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleGroupMembers((current) => ({
+                        ...current,
+                        ...Object.fromEntries(groupCalendar.members.map((member) => [member.id, false])),
+                      }))}
+                      className="text-[10px] font-bold text-violet-700 underline underline-offset-2"
+                    >
+                      Aucun
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {groupCalendar.members.map((member, memberIndex) => (
+                    <label key={member.id} className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={visibleGroupMembers[member.id] ?? true}
+                        onChange={(event) => setVisibleGroupMembers((current) => ({
+                          ...current,
+                          [member.id]: event.target.checked,
+                        }))}
+                        className="accent-violet-600"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-extrabold text-white ${GROUP_MEMBER_BADGE_COLORS[memberIndex % GROUP_MEMBER_BADGE_COLORS.length]}`}
+                      >
+                        {member.name.trim().slice(0, 1).toLocaleUpperCase('fr-FR')}
+                      </span>
+                      <span aria-hidden="true">{member.avatar}</span>
+                      {member.name}
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
             {calendarViewMode === 'group' && groupError && (
@@ -1876,16 +1931,25 @@ export default function App() {
                         const { dateStr, dayNumber, isWeekend } = cell;
                         const myDayLeaves = leaves.filter((item) => item.date === dateStr);
                         const partnerDayLeaves = partnerCalendar?.leaves.filter((item) => item.date === dateStr) ?? [];
+                        const visiblePartnerDayLeaves = calendarViewMode !== 'duo' || showPartnerInDuo
+                          ? partnerDayLeaves
+                          : [];
                         const groupDayLeaves = groupCalendar?.id === selectedGroupId
                           ? groupCalendar.leaves.filter((item) =>
                           item.date === dateStr && visibleGroupMembers[item.memberId] !== false
                             )
                           : [];
-                        const isSharedRest = myDayLeaves.length > 0 && partnerDayLeaves.length > 0;
+                        const groupDayMembers = groupCalendar?.members.filter((member) =>
+                          groupDayLeaves.some((item) => item.memberId === member.id)
+                        ) ?? [];
+                        const partnerInitial = partnerCalendar?.partnerName.trim().slice(0, 1).toLocaleUpperCase('fr-FR') ?? 'P';
+                        const isSharedRest = calendarViewMode === 'duo' &&
+                          myDayLeaves.length > 0 &&
+                          visiblePartnerDayLeaves.length > 0;
                         const dayLeaves = calendarViewMode === 'partner'
                           ? partnerDayLeaves
                           : calendarViewMode === 'duo'
-                            ? [...myDayLeaves, ...partnerDayLeaves]
+                            ? [...myDayLeaves, ...visiblePartnerDayLeaves]
                             : calendarViewMode === 'group'
                               ? groupDayLeaves
                             : myDayLeaves;
@@ -1893,8 +1957,11 @@ export default function App() {
                           ? partnerDayLeaves[0]
                           : calendarViewMode === 'group'
                             ? groupDayLeaves[0]
-                            : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? partnerDayLeaves[0] : undefined);
-                        const isPartnerOnly = calendarViewMode === 'partner' && Boolean(leave);
+                            : myDayLeaves[0] ?? (calendarViewMode === 'duo' ? visiblePartnerDayLeaves[0] : undefined);
+                        const isPartnerOnly = Boolean(leave) && (
+                          calendarViewMode === 'partner' ||
+                          (calendarViewMode === 'duo' && myDayLeaves.length === 0 && visiblePartnerDayLeaves.length > 0)
+                        );
                         const holiday = holidays.get(dateStr);
                         const isToday = dateStr === todayStr;
                         const isWithinWeatherForecast =
@@ -1940,7 +2007,12 @@ export default function App() {
                               myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
                             }}
                             title={isSharedRest
-                              ? `Repos partagé avec ${partnerCalendar?.partnerName} 🏖️`
+                              ? `Repos partagé · Moi ${myDayLeaves.map((item) => item.type).join(', ')} · ${partnerCalendar?.partnerName} ${visiblePartnerDayLeaves.map((item) => item.type).join(', ')}`
+                              : calendarViewMode === 'duo'
+                                ? [
+                                    ...myDayLeaves.map((item) => `Moi · ${item.type}`),
+                                    ...visiblePartnerDayLeaves.map((item) => `${partnerCalendar?.partnerName ?? 'Partenaire'} · ${item.type}`),
+                                  ].join(', ') || 'Aucun congé posé'
                               : calendarViewMode === 'group'
                                 ? groupDayLeaves.map((item) => `${item.memberName} · ${item.type}`).join(', ') || `Groupe ${groupCalendar?.name ?? ''} · lecture seule`
                               : leave
@@ -1954,7 +2026,40 @@ export default function App() {
                                     : 'Poser un jour off'}
                             className={`calendar-day relative aspect-square rounded-lg text-[10px] font-bold transition disabled:cursor-default ${dayColor} ${isToday ? '!ring-2 !ring-emerald-500 ring-offset-2' : ''}`}
                           >
-                            {leave ? `${dayNumber} ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : dayNumber}
+                            {calendarViewMode === 'duo' && myDayLeaves.length + visiblePartnerDayLeaves.length > 0 ? (
+                              <>
+                                <span className="block">{dayNumber}</span>
+                                <span className="block truncate text-[8px] leading-tight">
+                                  {[
+                                    ...myDayLeaves.map((item) => `Moi ${item.type}`),
+                                    ...visiblePartnerDayLeaves.map((item) => `${partnerInitial} ${item.type}`),
+                                  ].join(' · ')}
+                                </span>
+                              </>
+                            ) : calendarViewMode === 'group' ? (
+                              <>
+                                <span className="block">{dayNumber}</span>
+                                {groupDayMembers.length > 0 && (
+                                  <span className="absolute inset-x-0 bottom-0.5 flex items-center justify-center gap-0.5">
+                                    {groupDayMembers.slice(0, 3).map((member) => {
+                                      const memberIndex = groupCalendar?.members.findIndex((item) => item.id === member.id) ?? 0;
+                                      return (
+                                        <span
+                                          key={member.id}
+                                          aria-hidden="true"
+                                          className={`flex h-3 w-3 items-center justify-center rounded-full text-[6px] font-extrabold leading-none text-white ${GROUP_MEMBER_BADGE_COLORS[memberIndex % GROUP_MEMBER_BADGE_COLORS.length]}`}
+                                        >
+                                          {member.name.trim().slice(0, 1).toLocaleUpperCase('fr-FR')}
+                                        </span>
+                                      );
+                                    })}
+                                    {groupDayMembers.length > 3 && (
+                                      <span className="text-[7px] leading-none">+{groupDayMembers.length - 3}</span>
+                                    )}
+                                  </span>
+                                )}
+                              </>
+                            ) : leave ? `${dayNumber} ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : dayNumber}
                             {forecast && (
                               <WeatherBadge
                                 code={forecast.code}
@@ -1984,7 +2089,7 @@ export default function App() {
                 : calendarViewMode === 'group'
                   ? `Calendrier du groupe ${groupCalendar?.name ?? ''} · lecture seule. Cochez les membres à afficher.`
                 : calendarViewMode === 'duo'
-                  ? '🏖️ Les dates partagées sont vos repos communs. Une action ne modifie que votre calendrier.'
+                  ? 'Les congés de chacun sont identifiés dans la vue. Décochez le partenaire pour masquer ses dates ; une action ne modifie que votre calendrier.'
                   : 'Touchez un jour ouvré pour le poser. Touchez un CP ou RTT posé pour le retirer.'}
             </p>
             {calendarWeatherError && (
