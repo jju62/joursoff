@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CalendarRange,
   Check,
@@ -197,6 +198,20 @@ export function ExportCalendarModal({
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const annualLeaves = useMemo(
     () => leaves.filter((leave) => leave.date.startsWith(`${year}-`)).sort((a, b) => a.date.localeCompare(b.date)),
@@ -516,25 +531,37 @@ export function ExportCalendarModal({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-calendar-title"
+        className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5 sm:py-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">Exports & sync</p>
-            <h2 className="text-xl font-black text-slate-900">Exporter / Synchroniser mes congés</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700 sm:text-xs">Exports & sync</p>
+            <h2 id="export-calendar-title" className="text-base font-black text-slate-900 sm:text-xl">
+              Exporter / Synchroniser mes congés
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-500 transition hover:bg-slate-100"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 transition hover:bg-slate-100"
             aria-label="Fermer la modale"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-          <div className="space-y-5 p-5">
+          <div className="min-h-0 flex-1 touch-pan-y space-y-5 overflow-y-auto overscroll-contain p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:p-5">
           {!isPro ? (
             <>
               <div className="grid gap-3 md:grid-cols-2">
@@ -723,6 +750,7 @@ export function ExportCalendarModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

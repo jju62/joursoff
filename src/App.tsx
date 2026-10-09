@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   Download,
+  FileDown,
   Code2,
   Calendar,
   Zap,
@@ -42,6 +43,7 @@ import { usePWAInstall } from './usePWAInstall';
 import { WeatherBadge } from './WeatherBadge';
 import { AdBanner } from './AdBanner';
 import { EscapadesPanel } from './EscapadesPanel';
+import { InstallInstructionsModal } from './components/InstallInstructionsModal';
 import { useWeather } from './useWeather';
 import { forecastMonthlyRttBalance } from './rttForecast';
 import {
@@ -244,6 +246,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isInstallHelpOpen, setIsInstallHelpOpen] = useState(false);
   const [isAppTourOpen, setIsAppTourOpen] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -1562,15 +1565,15 @@ export default function App() {
       }}
       className="min-h-screen bg-slate-50 text-slate-900 flex flex-col"
     >
-      <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-3 shadow-xs backdrop-blur-md sm:gap-3 sm:px-8">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <img src="/icon-192.png" alt="Logo CongésZen" className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-md shadow-emerald-500/20" />
+      <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-2 shadow-xs backdrop-blur-md sm:gap-3 sm:px-8">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
+          <img src="/icon-192.png" alt="Logo CongésZen" className="h-8 w-8 shrink-0 rounded-xl object-cover shadow-md shadow-emerald-500/20 sm:h-10 sm:w-10 sm:rounded-2xl" />
           <div className="min-w-0">
-            <a href="#top" className="text-lg font-extrabold tracking-tight text-emerald-700">
+            <a href="#top" className="text-sm font-extrabold tracking-tight text-emerald-700 sm:text-lg">
               CongésZen
             </a>
             {user && profile.name.trim() && (
-              <p className="truncate text-xs text-slate-500">
+              <p className="hidden truncate text-xs text-slate-500 sm:block">
                 Bonjour {profile.name.trim()} 👋
               </p>
             )}
@@ -1578,20 +1581,25 @@ export default function App() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          {!isInstalled && isInstallable && (
+          {!isInstalled && (isInstallable || isIOSSafari) && (
             <button
               type="button"
-              onClick={() => void install()}
-              className="hidden items-center gap-1.5 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 sm:flex"
+              onClick={() => {
+                if (isInstallable) void install();
+                else setIsInstallHelpOpen(true);
+              }}
+              aria-label="Installer CongésZen"
+              className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-50 px-2 py-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 sm:gap-1.5 sm:px-2.5 sm:text-xs"
             >
-              <Download className="h-4 w-4" />
-              <span>Installer l&apos;app</span>
+              <Smartphone className="h-4 w-4" />
+              <span className="sm:hidden">Installer</span>
+              <span className="hidden sm:inline">Installer l&apos;app</span>
             </button>
           )}
           <button
             onClick={openProfileSettings}
             aria-label="Ouvrir le profil et les réglages"
-            className="relative flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 cursor-pointer sm:h-9 sm:w-9"
           >
             <span className="text-base" aria-hidden="true">{profile.avatar}</span>
             {isPro && (
@@ -1607,7 +1615,7 @@ export default function App() {
             onClick={openProfileSettings}
             aria-label={isSyncing ? 'Synchronisation en cours' : user ? 'Sauvegarde automatique active' : 'Données enregistrées sur cet appareil'}
             title={user ? 'Sauvegarde auto' : 'Sauvegarde locale'}
-            className="rounded-xl p-2 hover:bg-slate-100"
+            className="hidden rounded-xl p-2 hover:bg-slate-100 sm:flex"
           >
             {isSyncing ? (
               <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
@@ -1622,16 +1630,16 @@ export default function App() {
             onClick={() => setIsExportModalOpen(true)}
             data-tour="export"
             aria-label="Exporter"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 sm:px-3"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 sm:px-3"
           >
-            <Download className="h-4 w-4 text-emerald-600" />
+            <FileDown className="h-4 w-4 text-emerald-600" />
             <span className="hidden sm:inline">Exporter</span>
           </button>
           <button
             type="button"
             onClick={openNewLeaveModal}
             aria-label="Poser un jour off"
-            className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 sm:px-4"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-2 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 sm:px-4"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Poser un jour off</span>
@@ -1667,6 +1675,11 @@ export default function App() {
       )}
 
       <main id="top" className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-5 sm:py-8 pb-24 sm:pb-8">
+        <InstallInstructionsModal
+          isOpen={isInstallHelpOpen}
+          onClose={() => setIsInstallHelpOpen(false)}
+          isIOS={isIOSSafari}
+        />
         {isIOSSafari && (
           <aside className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5 text-[11px] leading-relaxed text-emerald-900">
             <Share className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
