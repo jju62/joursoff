@@ -217,6 +217,7 @@ export default function App() {
   const [quotas, setQuotas] = useState<Quotas>(getDefaultQuotas);
   const [personalization, setPersonalization] = useState<Personalization>({ theme: 'indigo', font: 'jakarta' });
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [settingsLoadedForUser, setSettingsLoadedForUser] = useState<string | null>(null);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -351,6 +352,7 @@ export default function App() {
       setIsAuthModalOpen(false);
       syncFromCloud(user.id);
     } else {
+      setSettingsLoadedForUser(null);
       hasSyncedRef.current = false;
       clearLocalAccountData();
       setIsAuthModalOpen(true);
@@ -359,30 +361,61 @@ export default function App() {
 
   // Persist only while an account is signed in.
   useEffect(() => {
-    if (!user) return;
+    if (!user || settingsLoadedForUser !== user.id) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(leaves));
-  }, [leaves, user]);
+  }, [leaves, settingsLoadedForUser, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || settingsLoadedForUser !== user.id) return;
     localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quotas));
-  }, [quotas, user]);
+  }, [quotas, settingsLoadedForUser, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || settingsLoadedForUser !== user.id) return;
     localStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(personalization));
-  }, [personalization, user]);
+  }, [personalization, settingsLoadedForUser, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || settingsLoadedForUser !== user.id) return;
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-  }, [profile, user]);
+  }, [profile, settingsLoadedForUser, user]);
 
   useEffect(() => {
     if (!user) return;
     const metadata = user.user_metadata;
+    let storedPersonalization: Personalization | null = null;
+    let storedProfile: Partial<UserProfile> | null = null;
+    try {
+      const personalizationRaw = localStorage.getItem(PERSONALIZATION_STORAGE_KEY);
+      const profileRaw = localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (personalizationRaw) {
+        const parsed: unknown = JSON.parse(personalizationRaw);
+        if (isPersonalization(parsed)) storedPersonalization = parsed;
+      }
+      if (profileRaw) {
+        const parsed: unknown = JSON.parse(profileRaw);
+        if (parsed && typeof parsed === 'object') {
+          const candidate = parsed as Partial<UserProfile>;
+          storedProfile = {
+            ...(typeof candidate.name === 'string' ? { name: candidate.name } : {}),
+            ...(typeof candidate.avatar === 'string' ? { avatar: candidate.avatar } : {}),
+            ...(candidate.departureCity === null ||
+              (candidate.departureCity &&
+                typeof candidate.departureCity.name === 'string' &&
+                typeof candidate.departureCity.latitude === 'number' &&
+                typeof candidate.departureCity.longitude === 'number')
+              ? { departureCity: candidate.departureCity }
+              : {}),
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Impossible de charger les préférences locales :', error);
+    }
     if (isPersonalization(metadata?.personalization)) {
       setPersonalization(metadata.personalization);
+    } else if (storedPersonalization) {
+      setPersonalization(storedPersonalization);
     }
     const storedCity = metadata?.departure_city;
     const departureCity: WeatherLocation | null | undefined =
@@ -402,10 +435,16 @@ export default function App() {
       ...current,
       name: typeof metadata?.display_name === 'string' && metadata.display_name.trim()
         ? metadata.display_name.trim()
-        : current.name,
-      avatar: typeof metadata?.avatar_emoji === 'string' ? metadata.avatar_emoji : current.avatar,
+        : storedProfile?.name ?? current.name,
+      avatar: typeof metadata?.avatar_emoji === 'string'
+        ? metadata.avatar_emoji
+        : storedProfile?.avatar ?? current.avatar,
+      ...(departureCity === undefined && storedProfile?.departureCity !== undefined
+        ? { departureCity: storedProfile.departureCity }
+        : {}),
       ...(departureCity !== undefined ? { departureCity } : {}),
     }));
+    setSettingsLoadedForUser(user.id);
   }, [user]);
 
   useEffect(() => {
@@ -538,22 +577,25 @@ export default function App() {
   }, [calendarViewMode, isPro, selectedGroupId]);
 
   useEffect(() => {
+    if (authInitializing || !user || settingsLoadedForUser !== user.id) return;
     if (!isPro && personalization.theme !== 'indigo') {
       setPersonalization((current) => ({ ...current, theme: 'indigo' }));
     }
-  }, [personalization.theme, isPro]);
+  }, [authInitializing, isPro, personalization.theme, settingsLoadedForUser, user]);
 
   useEffect(() => {
+    if (authInitializing || !user || settingsLoadedForUser !== user.id) return;
     if (!isPro && ['serif', 'mono', 'humanist'].includes(personalization.font)) {
       setPersonalization((current) => ({ ...current, font: 'jakarta' }));
     }
-  }, [personalization.font, isPro]);
+  }, [authInitializing, isPro, personalization.font, settingsLoadedForUser, user]);
 
   useEffect(() => {
+    if (authInitializing || !user || settingsLoadedForUser !== user.id) return;
     if (!isPro && !FREE_AVATARS.includes(profile.avatar)) {
       setProfile((current) => ({ ...current, avatar: '👋' }));
     }
-  }, [isPro, profile.avatar]);
+  }, [authInitializing, isPro, profile.avatar, settingsLoadedForUser, user]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
