@@ -110,14 +110,7 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
     if (!collapsed || !window.matchMedia('(max-width: 639px)').matches) return;
 
     const frame = window.requestAnimationFrame(() => {
-      const section = sectionRef.current;
-      if (!section) return;
-      const rect = section.getBoundingClientRect();
-      const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0;
-      const scrollOffset = rect.top - headerHeight - 12;
-      if (rect.top < headerHeight || rect.bottom > window.innerHeight - 80) {
-        window.scrollBy({ top: scrollOffset, behavior: 'smooth' });
-      }
+      sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [collapsed, expanded]);
@@ -142,7 +135,12 @@ export function EscapadesPanel({ date, isPro, collapsed = false }: EscapadesPane
       </button>
 
       {expanded && (
-        <div id={panelId} className="mt-3 space-y-3">
+        <div
+          id={panelId}
+          className={`mt-3 space-y-3 ${
+            collapsed ? 'max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-none sm:overflow-visible' : ''
+          }`}
+        >
           {!isPro ? (
             <div className="rounded-lg bg-white p-2.5">
               <p className="text-[11px] font-extrabold text-slate-800">Une idée d’escapade en France</p>

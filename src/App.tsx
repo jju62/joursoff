@@ -2041,11 +2041,6 @@ export default function App() {
                             ) : calendarViewMode === 'group' ? (
                               <>
                                 <span className="block">{dayNumber}</span>
-                                {holiday && (
-                                  <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
-                                    {holiday.name}
-                                  </span>
-                                )}
                                 {groupDayMembers.length > 0 && (
                                   <span className="flex items-center justify-center gap-0.5">
                                     {groupDayMembers.slice(0, 3).map((member) => {
@@ -2071,14 +2066,9 @@ export default function App() {
                                 <span className="block">
                                   {dayNumber}{leave ? ` ${leave.type}${leave.days === 0.5 ? ' ½' : ''}` : ''}
                                 </span>
-                                {holiday && (
-                                  <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
-                                    {holiday.name}
-                                  </span>
-                                )}
                               </>
                             )}
-                            {holiday && calendarViewMode === 'duo' && (
+                            {holiday && (
                               <span className="block max-h-[1.65em] overflow-hidden break-words text-[6px] leading-[0.82] sm:text-[8px] sm:leading-tight">
                                 {holiday.name}
                               </span>
