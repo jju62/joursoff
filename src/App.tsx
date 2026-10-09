@@ -153,8 +153,8 @@ function toLocalIsoDate(date: Date) {
 }
 
 type Personalization = {
-  theme: 'indigo' | 'emerald' | 'oled' | 'pastel' | 'seasonal' | 'midnight' | 'autumn' | 'abstract';
-  font: 'jakarta' | 'system' | 'rounded';
+  theme: 'indigo' | 'emerald' | 'oled' | 'pastel' | 'seasonal' | 'midnight' | 'autumn' | 'abstract' | 'ocean' | 'lavender';
+  font: 'jakarta' | 'system' | 'rounded' | 'serif' | 'mono' | 'humanist';
 };
 
 const FREE_AVATARS = ['👋', '😁', '😎', '🐱'];
@@ -186,10 +186,15 @@ function isPersonalization(value: unknown): value is Personalization {
       candidate.theme === 'seasonal' ||
       candidate.theme === 'midnight' ||
       candidate.theme === 'autumn' ||
-      candidate.theme === 'abstract') &&
+      candidate.theme === 'abstract' ||
+      candidate.theme === 'ocean' ||
+      candidate.theme === 'lavender') &&
     (candidate.font === 'jakarta' ||
       candidate.font === 'system' ||
-      candidate.font === 'rounded')
+      candidate.font === 'rounded' ||
+      candidate.font === 'serif' ||
+      candidate.font === 'mono' ||
+      candidate.font === 'humanist')
   );
 }
 
@@ -537,6 +542,12 @@ export default function App() {
       setPersonalization((current) => ({ ...current, theme: 'indigo' }));
     }
   }, [personalization.theme, isPro]);
+
+  useEffect(() => {
+    if (!isPro && ['serif', 'mono', 'humanist'].includes(personalization.font)) {
+      setPersonalization((current) => ({ ...current, font: 'jakarta' }));
+    }
+  }, [personalization.font, isPro]);
 
   useEffect(() => {
     if (!isPro && !FREE_AVATARS.includes(profile.avatar)) {
@@ -1518,6 +1529,16 @@ export default function App() {
     { value: 'midnight', label: 'Midnight', icon: Moon, premium: true },
     { value: 'autumn', label: 'Autumn', icon: Leaf, premium: true },
     { value: 'abstract', label: 'Abstract', icon: Sparkles, premium: true },
+    { value: 'ocean', label: 'Océan', icon: Cloud, premium: true },
+    { value: 'lavender', label: 'Lavande', icon: Sparkles, premium: true },
+  ];
+  const fontOptions: { value: Personalization['font']; label: string; premium: boolean }[] = [
+    { value: 'jakarta', label: 'Plus Jakarta Sans', premium: false },
+    { value: 'system', label: 'Système', premium: false },
+    { value: 'rounded', label: 'Arrondie', premium: false },
+    { value: 'serif', label: 'Sérif', premium: true },
+    { value: 'mono', label: 'Monospace', premium: true },
+    { value: 'humanist', label: 'Humaniste', premium: true },
   ];
   const calendarViewOptions = [
     { id: 'mine', label: 'Moi', description: 'Mon calendrier', icon: CalendarDays },
@@ -1561,7 +1582,13 @@ export default function App() {
           ? 'system-ui, -apple-system, sans-serif'
           : personalization.font === 'rounded'
             ? 'ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif'
-            : '"Plus Jakarta Sans", system-ui, sans-serif',
+            : personalization.font === 'serif'
+              ? 'Georgia, "Times New Roman", serif'
+              : personalization.font === 'mono'
+                ? 'ui-monospace, SFMono-Regular, Menlo, monospace'
+                : personalization.font === 'humanist'
+                  ? '"Trebuchet MS", Arial, sans-serif'
+                  : '"Plus Jakarta Sans", system-ui, sans-serif',
       }}
       className="min-h-screen bg-slate-50 text-slate-900 flex flex-col"
     >
@@ -2920,7 +2947,7 @@ export default function App() {
         <div
           className={`fixed inset-0 z-50 flex justify-center p-4 ${user ? 'items-end bg-slate-900/40 backdrop-blur-xs sm:items-center' : 'items-center overflow-y-auto bg-white'}`}
         >
-          <div className="bg-white w-full max-w-sm max-h-[90dvh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-100 space-y-4">
+          <div data-profile-settings className="bg-white w-full max-w-sm max-h-[90dvh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-100 space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Cloud className="w-5 h-5 text-indigo-600" />
@@ -3263,7 +3290,7 @@ export default function App() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-3">
+            <section data-personalization-settings className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
                 <Palette className="h-4 w-4 text-indigo-600" />
                 Personnalisation
@@ -3304,15 +3331,22 @@ export default function App() {
                 Police
                 <select
                   value={personalization.font}
-                  onChange={(event) => void handleSavePersonalization({
-                    ...personalization,
-                    font: event.target.value as Personalization['font'],
-                  })}
+                  onChange={(event) => {
+                    const selectedFont = fontOptions.find((option) => option.value === event.target.value);
+                    if (!selectedFont) return;
+                    if (selectedFont.premium && !isPro) {
+                      setPaywallFeature(`la police ${selectedFont.label}`);
+                      return;
+                    }
+                    void handleSavePersonalization({ ...personalization, font: selectedFont.value });
+                  }}
                   className="ml-auto rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700"
                 >
-                  <option value="jakarta">Plus Jakarta Sans</option>
-                  <option value="system">Système</option>
-                  <option value="rounded">Arrondie</option>
+                  {fontOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}{option.premium ? ' · Pro' : ''}
+                    </option>
+                  ))}
                 </select>
               </label>
             </section>
