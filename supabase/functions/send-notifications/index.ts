@@ -590,6 +590,9 @@ Deno.serve(async (request) => {
     } catch {
       return new Response('Invalid request body', { status: 400 });
     }
+    if (body.action === 'get-vapid-public-key') {
+      return Response.json({ publicKey: vapidPublicKey });
+    }
     if (body.action !== 'process-leave-events') {
       return new Response('Unsupported action', { status: 400 });
     }

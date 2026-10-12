@@ -40,9 +40,16 @@ async function enablePush(userId: string) {
     throw new Error('Autorisez les notifications dans les réglages de votre navigateur pour les activer.');
   }
 
-  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+  let vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
   if (!vapidPublicKey) {
-    throw new Error('Le service push n’est pas encore configuré sur cette installation.');
+    const { data, error } = await supabase.functions.invoke('send-notifications', {
+      body: { action: 'get-vapid-public-key' },
+    });
+    if (error) throw error;
+    vapidPublicKey = data?.publicKey;
+  }
+  if (!vapidPublicKey) {
+    throw new Error('Le service push n’est pas configuré sur le serveur. Vérifiez les secrets VAPID et redéployez send-notifications.');
   }
 
   const registration = await navigator.serviceWorker.ready;

@@ -114,9 +114,7 @@ Un alignement complet des dates produit une alerte dédiée.
 
 Générez une paire VAPID (par exemple avec `npx web-push generate-vapid-keys`), puis :
 
-1. Définissez `VITE_VAPID_PUBLIC_KEY` avec la clé publique dans l’environnement de
-   build du site.
-2. Définissez les secrets de l’Edge Function, sans jamais exposer la clé privée :
+1. Définissez les secrets de l’Edge Function, sans jamais exposer la clé privée :
 
    ```sh
    supabase secrets set VAPID_PUBLIC_KEY="…" VAPID_PRIVATE_KEY="…" \
@@ -124,7 +122,7 @@ Générez une paire VAPID (par exemple avec `npx web-push generate-vapid-keys`),
    supabase functions deploy send-notifications
    ```
 
-3. Dans Supabase Cron, planifiez un `POST` quotidien vers
+2. Dans Supabase Cron, planifiez un `POST` quotidien vers
    `/functions/v1/send-notifications` (par exemple à 04:00 UTC) avec
    `Authorization: Bearer <NOTIFICATION_CRON_SECRET>`. La fonction est configurée
    sans validation JWT intégrée ; elle refuse toute requête sans ce secret.
