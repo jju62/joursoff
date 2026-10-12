@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.congeszen.twa",
+        "sha256_cert_fingerprints": ["E8:A8:BC:49:AB:9A:82:00:57:DE:3A:22:FB:7E:44:3A:0D:26:DC:B3:CD:51:C9:01:F7:93:95:22:92:81:17:6F"]
+      }
+    }]

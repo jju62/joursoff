@@ -80,7 +80,6 @@ import { ExportCalendarModal } from './components/ExportCalendarModal';
 import { PaywallModal } from './components/PaywallModal';
 import { AppTour } from './components/AppTour';
 import { OnboardingData, OnboardingWizard } from './components/OnboardingWizard';
-import { UserProfile as UserProfileNotifications } from './components/UserProfile';
 
 export interface LeaveItem {
   id: number;
@@ -3120,14 +3119,6 @@ export default function App() {
                 Nom, avatar et ville enregistrés sur cet appareil{user ? ' et dans les métadonnées de votre compte' : ''}. La météo est fournie par Open-Meteo, sans clé API.
               </p>
             </section>
-
-            {user && (
-              <UserProfileNotifications
-                userId={user.id}
-                isPro={isPro}
-                onUpgrade={(feature) => setPaywallFeature(feature)}
-              />
-            )}
 
             <section data-tour="sharing" className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/50 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">

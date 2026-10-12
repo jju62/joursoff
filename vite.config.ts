@@ -12,9 +12,6 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
-        workbox: {
-          importScripts: ['/push-sw.js'],
-        },
         manifest: {
           id: '/',
           name: 'CongésZen — Congés, RTT & Optimiseur de Ponts',

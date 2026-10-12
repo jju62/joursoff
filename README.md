@@ -94,45 +94,17 @@ compte autorisé, puis le client renouvelle sa session avant d’écrire le stat
 Ne validez pas un abonnement payant à partir de l’état local du navigateur. La
 validation des droits Pro nécessite une source de confiance côté serveur.
 
-## Notifications push
+## Nettoyage des notifications push
 
-Appliquez [`supabase/migrations/20261010100000_notifications.sql`](./supabase/migrations/20261010100000_notifications.sql)
-après les migrations des profils et de configuration. Les préférences sont stockées
-dans `profiles.notification_preferences`; une RPC vérifie l’identité et le statut Pro.
-Les abonnements Web Push sont isolés par utilisateur. Le worker PWA affiche les
-notifications reçues, mais les navigateurs n’envoient pas de push sans les clés VAPID
-et le traitement serveur ci-dessous.
+Pour un projet Supabase où les notifications ont déjà été activées, appliquez
+[`supabase/migrations/20261012100000_remove_notifications.sql`](./supabase/migrations/20261012100000_remove_notifications.sql)
+afin de supprimer les abonnements, les préférences, la file d’événements et les tâches Cron.
+Supprimez également l’Edge Function déjà déployée et ses secrets inutilisés :
 
-Appliquez également [`supabase/migrations/20261010120000_duo_group_notifications.sql`](./supabase/migrations/20261010120000_duo_group_notifications.sql).
-Elle ajoute l’option Duo & Groupes (active par défaut), une file privée alimentée par
-les insertions/modifications/suppressions de congés et sa fonction de réservation
-réservée au service role. Après la synchronisation du calendrier, le client authentifié
-demande à l’Edge Function de traiter les changements en attente ; le Cron quotidien
-reprend également les événements dont le traitement a échoué. Les push ne sont envoyés
-qu’aux comptes liés en Duo ou membres des mêmes groupes ayant activé cette préférence.
-Un alignement complet des dates produit une alerte dédiée.
-
-Générez une paire VAPID (par exemple avec `npx web-push generate-vapid-keys`), puis :
-
-1. Définissez les secrets de l’Edge Function, sans jamais exposer la clé privée :
-
-   ```sh
-   supabase secrets set VAPID_PUBLIC_KEY="…" VAPID_PRIVATE_KEY="…" \
-     VAPID_SUBJECT="mailto:support@congeszen.fr" NOTIFICATION_CRON_SECRET="…"
-   supabase functions deploy send-notifications
-   ```
-
-2. Dans Supabase Cron, planifiez un `POST` quotidien vers
-   `/functions/v1/send-notifications` (par exemple à 04:00 UTC) avec
-   `Authorization: Bearer <NOTIFICATION_CRON_SECRET>`. La fonction est configurée
-   sans validation JWT intégrée ; elle refuse toute requête sans ce secret.
-
-Le traitement utilise les congés et quotas déjà synchronisés dans
-`user_settings(leaves, quotas)`, les jours fériés nationaux français et, pour Pro,
-Open-Meteo lorsque la ville de départ est renseignée. Les alertes sont dédupliquées
-par compte et par événement. Sur la première activation d’une notification, le
-navigateur demande sa permission et enregistre son abonnement push ; le site doit
-être servi en HTTPS (localhost est admis pour le développement).
+```sh
+supabase functions delete send-notifications
+supabase secrets unset VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT NOTIFICATION_CRON_SECRET
+```
 
 ## Parcours de première connexion
 
