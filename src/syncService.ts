@@ -161,6 +161,14 @@ export async function syncToCloud(
       return false;
     }
 
+    const { error: notificationError } = await supabase.functions.invoke('send-notifications', {
+      body: { action: 'process-leave-events' },
+    });
+    if (notificationError) {
+      console.error('Congés synchronisés, mais le traitement des notifications Duo est en attente :', notificationError);
+      alert('Congés synchronisés. Les notifications Duo et Groupes seront envoyées lors de la prochaine reprise du service.');
+    }
+
     return true;
   } catch (err: any) {
     const message = err?.message || String(err);

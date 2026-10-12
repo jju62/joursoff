@@ -80,6 +80,7 @@ import { ExportCalendarModal } from './components/ExportCalendarModal';
 import { PaywallModal } from './components/PaywallModal';
 import { AppTour } from './components/AppTour';
 import { OnboardingData, OnboardingWizard } from './components/OnboardingWizard';
+import { UserProfile as UserProfileNotifications } from './components/UserProfile';
 
 export interface LeaveItem {
   id: number;
@@ -292,8 +293,6 @@ export default function App() {
   const [leftViewMode, setLeftViewMode] = useState<'calendrier' | 'liste'>('calendrier');
   const [calendarMonthIndex, setCalendarMonthIndex] = useState<number>(new Date().getMonth());
   const currentCalendarDayRef = React.useRef<HTMLButtonElement | null>(null);
-  const currentCalendarMonthRef = React.useRef<HTMLElement | null>(null);
-  const calendarMonthsContainerRef = React.useRef<HTMLDivElement | null>(null);
 
   // Form state for manual leave modal
   const [formType, setFormType] = useState<'CP' | 'RTT'>('CP');
@@ -724,6 +723,13 @@ export default function App() {
           },
         });
         if (error) throw error;
+        if (!cityError) {
+          const { data: cityUpdated, error: cityErrorResult } = await supabase.rpc('update_my_departure_city', {
+            p_departure_city: departureCity?.name ?? null,
+          });
+          if (cityErrorResult) throw cityErrorResult;
+          if (cityUpdated !== true) throw new Error('Supabase n’a pas confirmé la mise à jour de la ville.');
+        }
       }
       showToast(cityError ? 'Profil enregistré. La ville de départ n’a pas été modifiée.' : 'Profil et ville de départ enregistrés.');
     } catch (error) {
@@ -1524,16 +1530,11 @@ export default function App() {
 
   useEffect(() => {
     if (activeView !== 'calendar') return;
-    if (window.matchMedia('(max-width: 639px)').matches) return;
     const timeout = window.setTimeout(() => {
-      const container = calendarMonthsContainerRef.current;
-      const month = currentCalendarMonthRef.current;
-      if (!container || !month) return;
-      const containerTop = container.getBoundingClientRect().top;
-      const monthTop = month.getBoundingClientRect().top;
-      container.scrollTo({
-        top: container.scrollTop + monthTop - containerTop,
+      currentCalendarDayRef.current?.scrollIntoView({
         behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest',
       });
     }, 300);
     return () => window.clearTimeout(timeout);
@@ -2012,7 +2013,6 @@ export default function App() {
             </div>
 
             <div
-              ref={calendarMonthsContainerRef}
               role="region"
               aria-label="Mois du calendrier"
               tabIndex={0}
@@ -2023,13 +2023,9 @@ export default function App() {
                 const holidays = new Map(
                   getFrenchHolidays(month.year).map((holiday) => [holiday.date, holiday])
                 );
-                const isCurrentMonth =
-                  month.year === Number(todayStr.slice(0, 4)) &&
-                  month.monthIndex === Number(todayStr.slice(5, 7)) - 1;
                 return (
                   <article
                     key={`${month.year}-${month.monthIndex}`}
-                    ref={isCurrentMonth ? currentCalendarMonthRef : undefined}
                     className="scroll-mt-20 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm"
                   >
                     <h2 className="mb-2 text-sm font-extrabold text-slate-800">{month.label}</h2>
@@ -3124,6 +3120,14 @@ export default function App() {
                 Nom, avatar et ville enregistrés sur cet appareil{user ? ' et dans les métadonnées de votre compte' : ''}. La météo est fournie par Open-Meteo, sans clé API.
               </p>
             </section>
+
+            {user && (
+              <UserProfileNotifications
+                userId={user.id}
+                isPro={isPro}
+                onUpgrade={(feature) => setPaywallFeature(feature)}
+              />
+            )}
 
             <section data-tour="sharing" className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/50 p-3.5 space-y-3">
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
