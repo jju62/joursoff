@@ -5,9 +5,6 @@ import {
   Trash2,
   Check,
   Copy,
-  Download,
-  FileDown,
-  Code2,
   Calendar,
   Zap,
   X,
@@ -38,10 +35,8 @@ import {
   BridgeOpportunity,
 } from './holidays2026';
 import { getBookableLeaveDates } from './leaveDates';
-import { STANDALONE_HTML_CODE } from './standaloneHtml';
 import { usePWAInstall } from './usePWAInstall';
 import { WeatherBadge } from './WeatherBadge';
-import { AdBanner } from './AdBanner';
 import { EscapadesPanel } from './EscapadesPanel';
 import { InstallInstructionsModal } from './components/InstallInstructionsModal';
 import { useWeather } from './useWeather';
@@ -76,10 +71,11 @@ import {
 import { useAuth } from './context/AuthContext';
 import { ProTestAccessButton } from './ProTestAccessButton';
 import { TravelArtwork } from './components/TravelArtwork';
-import { ExportCalendarModal } from './components/ExportCalendarModal';
 import { PaywallModal } from './components/PaywallModal';
+import { DayActionModal, DayWeatherModal } from './components/DayActionModal';
 import { AppTour } from './components/AppTour';
 import { OnboardingData, OnboardingWizard } from './components/OnboardingWizard';
+import { calculateLeaveBalances } from './quotaBalances';
 
 export interface LeaveItem {
   id: number;
@@ -250,12 +246,13 @@ export default function App() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isInstallHelpOpen, setIsInstallHelpOpen] = useState(false);
   const [isAppTourOpen, setIsAppTourOpen] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [selectedDayActionDate, setSelectedDayActionDate] = useState<string | null>(null);
+  const [selectedWeatherDate, setSelectedWeatherDate] = useState<string | null>(null);
+  const [selectedEscapadeDate, setSelectedEscapadeDate] = useState<string | null>(null);
+  const openPaywallModal = (feature: string) => setPaywallFeature(feature);
   // Guard : empêche la double-sync (INITIAL_SESSION + SIGNED_IN)
   const hasSyncedRef = React.useRef(false);
   const activeUserIdRef = React.useRef<string | null>(null);
@@ -459,6 +456,9 @@ export default function App() {
   };
 
   const refreshDuoData = useCallback(async () => {
+    if (!isPro) {
+      throw new Error('Le partage Duo est réservé aux membres Pro.');
+    }
     const relationship = await getDuoRelationship();
     setDuoRelationship(relationship);
     if (relationship?.status === 'accepted') {
@@ -472,7 +472,7 @@ export default function App() {
     } else {
       setPartnerCalendar(null);
     }
-  }, []);
+  }, [isPro]);
 
   const refreshCalendarGroups = useCallback(async () => {
     const groups = await getCalendarGroups();
@@ -483,10 +483,10 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!user) {
+    if (!user || !isPro) {
       setDuoRelationship(null);
       setPartnerCalendar(null);
-      setDuoError(null);
+      if (!user) setDuoError(null);
       setCalendarViewMode('mine');
       return;
     }
@@ -518,7 +518,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [isPro, user]);
 
   useEffect(() => {
     if (!user) {
@@ -526,6 +526,12 @@ export default function App() {
       setGroupCalendar(null);
       setSelectedGroupId('');
       setGroupError(null);
+      return;
+    }
+    if (!isPro) {
+      setCalendarGroups([]);
+      setGroupCalendar(null);
+      setSelectedGroupId('');
       return;
     }
     let cancelled = false;
@@ -542,10 +548,10 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [isPro, user]);
 
   useEffect(() => {
-    if (!isPro && calendarViewMode === 'group') {
+    if (!isPro && (calendarViewMode === 'group' || calendarViewMode === 'duo' || calendarViewMode === 'partner')) {
       setCalendarViewMode('mine');
       setGroupCalendar(null);
       return;
@@ -845,7 +851,7 @@ export default function App() {
     setProfileError(null);
     setDuoError(null);
     setIsAuthModalOpen(true);
-    if (user) {
+    if (user && isPro) {
       void refreshDuoData().catch((error: unknown) => {
         setDuoError(error instanceof Error ? error.message : 'Impossible de rafraîchir le partage Duo.');
       });
@@ -853,6 +859,10 @@ export default function App() {
   };
 
   const handleRefreshDuo = async () => {
+    if (!isPro) {
+      openPaywallModal('le partage Duo');
+      return;
+    }
     setDuoBusy(true);
     setDuoError(null);
     try {
@@ -866,6 +876,10 @@ export default function App() {
   };
 
   const handleCreateDuoInvitation = async () => {
+    if (!isPro) {
+      openPaywallModal('le partage Duo');
+      return;
+    }
     if (!user) {
       setDuoError('Connectez-vous pour créer un code de partage.');
       return;
@@ -885,6 +899,10 @@ export default function App() {
 
   const handleAcceptDuoInvitation = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!isPro) {
+      openPaywallModal('le partage Duo');
+      return;
+    }
     if (!user) {
       setDuoError('Connectez-vous pour rejoindre un partage Duo.');
       return;
@@ -936,7 +954,7 @@ export default function App() {
       return;
     }
     if (!isPro) {
-      setGroupError('La création de groupes personnalisés est réservée à Pro.');
+      openPaywallModal('la gestion des groupes');
       return;
     }
     setGroupBusy(true);
@@ -957,7 +975,8 @@ export default function App() {
 
   const handleCreateCalendarGroupInvitation = async () => {
     if (!isPro || !selectedGroupId) {
-      setGroupError('Sélectionnez un groupe Pro pour créer un code d’invitation.');
+      if (!isPro) openPaywallModal('la gestion des groupes');
+      else setGroupError('Sélectionnez un groupe Pro pour créer un code d’invitation.');
       return;
     }
     setGroupBusy(true);
@@ -978,7 +997,7 @@ export default function App() {
       return;
     }
     if (!isPro) {
-      setGroupError('L’accès aux groupes personnalisés est réservé à Pro.');
+      openPaywallModal('la gestion des groupes');
       return;
     }
     setGroupBusy(true);
@@ -1077,81 +1096,10 @@ export default function App() {
     [todayStr, quotas.periodStart, quotas.periodEnd]
   );
 
-  const { cpRemaining, rttRemaining, cpUsed, rttUsed, rttAllowance } = useMemo(() => {
-    let cpU = 0;
-    let rttU = 0;
-    for (const item of leaves) {
-      if (item.type === 'CP' && item.date >= activeQuotaPeriod.start && item.date <= activeQuotaPeriod.end) {
-        cpU += Number(item.days) || 0;
-      }
-    }
-    let availableRtt = quotas.rtt;
-    if (quotas.rttMode === 'monthly') {
-      const balanceDate = new Date(`${quotas.rttBalanceDate}T00:00:00`);
-      const balanceTimestamp = balanceDate.getTime();
-      const nowTimestamp = Date.now();
-      const events: { timestamp: number; kind: 'accrual' | 'leave'; days: number }[] = [];
-      let monthOffset = 1;
-      while (Number.isFinite(balanceTimestamp)) {
-        const accrualDate = new Date(balanceDate);
-        const originalDay = balanceDate.getDate();
-        accrualDate.setDate(1);
-        accrualDate.setMonth(balanceDate.getMonth() + monthOffset);
-        const lastDayOfMonth = new Date(
-          accrualDate.getFullYear(),
-          accrualDate.getMonth() + 1,
-          0
-        ).getDate();
-        accrualDate.setDate(Math.min(originalDay, lastDayOfMonth));
-        const timestamp = accrualDate.getTime();
-        if (!Number.isFinite(timestamp)) break;
-        if (timestamp > nowTimestamp) break;
-        events.push({ timestamp, kind: 'accrual', days: quotas.rttMonthly });
-        monthOffset += 1;
-      }
-      for (const item of leaves) {
-        if (item.type !== 'RTT' || !item.recordedAt || item.date < todayStr) continue;
-        const timestamp = new Date(item.recordedAt).getTime();
-        if (timestamp >= balanceTimestamp && timestamp <= nowTimestamp) {
-          events.push({ timestamp, kind: 'leave', days: Number(item.days) || 0 });
-        }
-      }
-      events.sort((a, b) => a.timestamp - b.timestamp || (a.kind === 'accrual' ? -1 : 1));
-      availableRtt = Math.max(
-        0,
-        quotas.rttMax === null
-          ? quotas.rttCurrentBalance
-          : Math.min(quotas.rttCurrentBalance, quotas.rttMax)
-      );
-      for (const event of events) {
-        if (event.kind === 'accrual') {
-          availableRtt += event.days;
-          if (quotas.rttMax !== null) availableRtt = Math.min(availableRtt, quotas.rttMax);
-        } else {
-          availableRtt -= event.days;
-          rttU += event.days;
-        }
-      }
-    } else {
-      for (const item of leaves) {
-        if (item.type === 'RTT' && item.date >= activeQuotaPeriod.start && item.date <= activeQuotaPeriod.end) {
-          rttU += Number(item.days) || 0;
-        }
-      }
-      availableRtt = quotas.rtt - rttU;
-    }
-    return {
-      cpUsed: cpU,
-      rttUsed: rttU,
-      cpRemaining: quotas.cp - cpU,
-      rttRemaining: availableRtt,
-      rttAllowance: quotas.rttMode === 'monthly' && quotas.rttMax !== null
-        ? quotas.rttMax
-        : quotas.rttMode === 'monthly'
-          ? Math.max(quotas.rttCurrentBalance, availableRtt)
-          : quotas.rtt,
-    };
-  }, [leaves, quotas, activeQuotaPeriod, todayStr]);
+  const { cpRemaining, rttRemaining, cpUsed, rttUsed, rttAllowance } = useMemo(
+    () => calculateLeaveBalances(leaves, quotas, todayStr),
+    [leaves, quotas, todayStr]
+  );
   const rttNearLimit = quotas.rttMode === 'monthly' &&
     quotas.rttMax !== null &&
     quotas.rttMax > 0 &&
@@ -1429,39 +1377,6 @@ export default function App() {
     await syncToCloud(updated, quotas);
   };
 
-  const handleCopyStandaloneHtml = async () => {
-    try {
-      await navigator.clipboard.writeText(STANDALONE_HTML_CODE);
-      setCopiedCode(true);
-      showToast('Code index.html complet copié dans le presse-papiers !');
-      setTimeout(() => setCopiedCode(false), 2500);
-    } catch {
-      // Fallback textarea copy
-      const textarea = document.createElement('textarea');
-      textarea.value = STANDALONE_HTML_CODE;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiedCode(true);
-      showToast('Code index.html complet copié !');
-      setTimeout(() => setCopiedCode(false), 2500);
-    }
-  };
-
-  const handleDownloadStandaloneHtml = () => {
-    const blob = new Blob([STANDALONE_HTML_CODE], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'index.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Fichier index.html téléchargé.');
-  };
-
   const openModalWithDate = (dateStr: string) => {
     triggerHaptic();
     setSelectedYear(Number(dateStr.slice(0, 4)));
@@ -1583,16 +1498,18 @@ export default function App() {
     { value: 'humanist', label: 'Humaniste', premium: true },
   ];
   const calendarViewOptions = [
-    { id: 'mine', label: 'Moi', description: 'Mon calendrier', icon: CalendarDays },
+    { id: 'mine', label: 'Moi', description: 'Mon calendrier', icon: CalendarDays, premium: false },
     ...(partnerCalendar ? [
-      { id: 'partner', label: 'Partenaire', description: `Calendrier de ${partnerCalendar.partnerName}`, icon: UserRound },
-      { id: 'duo', label: 'Duo', description: 'Vue superposée', icon: UsersRound },
+      { id: 'partner', label: 'Partenaire', description: `Calendrier de ${partnerCalendar.partnerName}`, icon: UserRound, premium: true },
     ] : []),
+    { id: 'duo', label: 'Duo', description: 'Vue superposée', icon: UsersRound, premium: true },
+    { id: 'groups', label: 'Groupes', description: 'Gérer les groupes', icon: UsersRound, premium: true },
     ...(isPro ? calendarGroups.map((group) => ({
       id: `group:${group.id}`,
       label: group.name,
       description: `Groupe ${group.name}`,
       icon: UsersRound,
+      premium: false,
     })) : []),
   ];
   const storedDepartureCity = user?.user_metadata.departure_city;
@@ -1696,16 +1613,6 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={() => setIsExportModalOpen(true)}
-            data-tour="export"
-            aria-label="Exporter"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 sm:px-3"
-          >
-            <FileDown className="h-4 w-4 text-emerald-600" />
-            <span className="hidden sm:inline">Exporter</span>
-          </button>
-          <button
-            type="button"
             onClick={openNewLeaveModal}
             aria-label="Poser un jour off"
             className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-2 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 sm:px-4"
@@ -1787,13 +1694,6 @@ export default function App() {
 
         {activeView === 'calendar' && (
           <section key={activeView} aria-label="Calendrier annuel" data-tour="calendar" className="view-enter space-y-4">
-            {!isPro && (
-              <AdBanner
-                isPro={isPro}
-                variant="compact"
-                onUpgrade={() => void handleSetProStatus(true)}
-              />
-            )}
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h1 className="text-xl font-extrabold text-slate-900">
@@ -1845,9 +1745,19 @@ export default function App() {
                           aria-pressed={isSelected}
                           title={option.description}
                           onClick={() => {
+                            if (option.premium && !isPro) {
+                              openPaywallModal(option.id === 'groups' ? 'la gestion des groupes' : 'le mode Duo');
+                              return;
+                            }
+                            if (option.id === 'groups') {
+                              openProfileSettings();
+                              return;
+                            }
                             if (option.id.startsWith('group:')) {
                               setSelectedGroupId(option.id.slice('group:'.length));
                               setCalendarViewMode('group');
+                            } else if (option.id === 'duo' && !partnerCalendar) {
+                              openProfileSettings();
                             } else {
                               setCalendarViewMode(option.id as 'mine' | 'partner' | 'duo');
                             }
@@ -1860,6 +1770,11 @@ export default function App() {
                         >
                           <Icon className="h-3.5 w-3.5 shrink-0" />
                           <span className="max-w-32 truncate">{option.label}</span>
+                          {option.premium && !isPro && (
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-black leading-none text-amber-900">
+                              PRO
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -1889,6 +1804,26 @@ export default function App() {
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-300" />Férié</span>
               </div>
             </div>
+            {calendarViewMode === 'duo' && partnerCalendar && (
+              <div className="grid grid-cols-1 gap-2 rounded-2xl border border-fuchsia-100 bg-gradient-to-r from-emerald-50/80 to-fuchsia-50/80 p-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/80 bg-white/80 px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Mon solde</p>
+                  <p className="mt-1 text-sm font-extrabold text-slate-900">
+                    {formatFrNumber(cpRemaining)} CP <span className="text-slate-300">|</span>{' '}
+                    {formatFrNumber(rttRemaining)} RTT
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/80 bg-white/80 px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wide text-fuchsia-700">
+                    Solde de {partnerCalendar.partnerName}
+                  </p>
+                  <p className="mt-1 text-sm font-extrabold text-slate-900">
+                    {formatFrNumber(partnerCalendar.cpBalance)} CP <span className="text-slate-300">|</span>{' '}
+                    {formatFrNumber(partnerCalendar.rttBalance)} RTT
+                  </p>
+                </div>
+              </div>
+            )}
             {calendarViewMode === 'group' && groupCalendar && (
               <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -2078,10 +2013,11 @@ export default function App() {
                         const inPeriod = dateStr >= activeQuotaPeriod.start && dateStr <= activeQuotaPeriod.end;
                         const isPast = dateStr < todayStr;
                         const pastCanBeBooked = month.year === new Date().getFullYear();
+                        const hasVisibleDuoLeave = calendarViewMode === 'duo' && visiblePartnerDayLeaves.length > 0;
                         const disabled =
                           calendarViewMode === 'partner' ||
                           calendarViewMode === 'group' ||
-                          (!myDayLeaves.length && (
+                          (!myDayLeaves.length && !hasVisibleDuoLeave && (
                           !inPeriod ||
                           isWeekend ||
                           Boolean(holiday) ||
@@ -2112,7 +2048,11 @@ export default function App() {
                                 calendarViewMode === 'partner' ||
                                 calendarViewMode === 'group'
                               ) return;
-                              myDayLeaves[0] ? handleDeleteLeave(myDayLeaves[0].id) : openModalWithDate(dateStr);
+                              if (myDayLeaves.length > 0 || hasVisibleDuoLeave) {
+                                setSelectedDayActionDate(dateStr);
+                              } else {
+                                openModalWithDate(dateStr);
+                              }
                             }}
                             title={isSharedRest
                               ? `Repos partagé · Moi ${myDayLeaves.map((item) => item.type).join(', ')} · ${partnerCalendar?.partnerName} ${visiblePartnerDayLeaves.map((item) => item.type).join(', ')}`
@@ -2621,6 +2561,23 @@ export default function App() {
           <div className="lg:col-span-12 space-y-8">
             {/* Section Bons plans de ponts 2026 */}
             <section key={`optimizer-${activeView}`} className={activeView === 'optimizer' ? 'view-enter' : 'hidden'} id="optimiseur">
+              {selectedEscapadeDate && (
+                <div className="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-extrabold text-indigo-900">
+                      Escapade prévue pour le {formatShortDateFr(selectedEscapadeDate)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEscapadeDate(null)}
+                      className="rounded-lg px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-white"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                  <EscapadesPanel key={selectedEscapadeDate} date={selectedEscapadeDate} isPro={isPro} />
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -2821,15 +2778,6 @@ export default function App() {
                             </p>
                           )}
                         </div>}
-                        {activeView === 'optimizer' && !isPro && bridgeIndex === 0 && (
-                          <div className="mt-3">
-                            <AdBanner
-                              isPro={isPro}
-                              variant="in-feed"
-                              onUpgrade={() => void handleSetProStatus(true)}
-                            />
-                          </div>
-                        )}
                         <EscapadesPanel
                           date={bridge.bridgeDates[0]}
                           isPro={isPro}
@@ -3033,7 +2981,7 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         if (premiumAvatar && !isPro) {
-                          setPaywallFeature('les avatars exclusifs');
+                          openPaywallModal('les avatars exclusifs');
                           return;
                         }
                         void handleSelectAvatar(avatar);
@@ -3080,7 +3028,7 @@ export default function App() {
                         {isPro ? <Crown className="h-3.5 w-3.5 text-amber-500" /> : null}
                         {isPro ? 'Compte Pro Premium' : 'Compte Gratuit'}
                       </p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">{isPro ? 'Sans pub · accès complet' : 'Avec pubs · mode standard'}</p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">{isPro ? 'Accès complet' : 'Accès standard'}</p>
                     </div>
                     <button
                       type="button"
@@ -3124,7 +3072,23 @@ export default function App() {
               <h4 className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
                 <Home className="h-4 w-4 text-fuchsia-600" />
                 Partage / Duo
+                {!isPro && <Crown className="ml-auto h-3.5 w-3.5 text-amber-500" />}
               </h4>
+              {!isPro ? (
+                <div className="space-y-2 rounded-xl bg-white p-3">
+                  <p className="text-[11px] font-semibold leading-relaxed text-fuchsia-900">
+                    Passez Pro pour créer ou rejoindre un partage et accéder à la vue Duo.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openPaywallModal('le partage Duo')}
+                    className="w-full rounded-xl bg-fuchsia-600 py-2.5 text-xs font-extrabold text-white transition hover:bg-fuchsia-700"
+                  >
+                    Découvrir Duo Pro
+                  </button>
+                </div>
+              ) : (
+                <>
               {duoRelationship?.status === 'accepted' ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 rounded-xl border border-fuchsia-100 bg-white p-3">
@@ -3134,7 +3098,7 @@ export default function App() {
                         Calendrier lié à {duoRelationship.partnerName}
                       </p>
                       <p className="mt-0.5 text-[10px] text-slate-500">
-                        Les dates, types et demi-journées posés sont partagés. Soldes et libellés restent privés.
+                        Les dates, types, soldes et demi-journées posés sont partagés. Les libellés restent privés.
                       </p>
                     </div>
                   </div>
@@ -3219,7 +3183,7 @@ export default function App() {
                     </form>
                   )}
                   <p className="text-[10px] leading-relaxed text-slate-500">
-                    Le partage est révocable à tout moment. Aucun solde, email ou libellé de congé n’est transmis.
+                    Le partage est révocable à tout moment. Les soldes sont réservés à la vue Duo Pro ; les emails et libellés de congé ne sont jamais transmis.
                   </p>
                 </div>
               )}
@@ -3227,6 +3191,8 @@ export default function App() {
                 <p role="alert" className="rounded-xl bg-red-50 p-2.5 text-[11px] font-semibold text-red-700">
                   {duoError}
                 </p>
+              )}
+                </>
               )}
             </section>
 
@@ -3237,9 +3203,18 @@ export default function App() {
                 {!isPro && <Crown className="ml-auto h-3.5 w-3.5 text-amber-500" />}
               </h4>
               {!isPro ? (
-                <p className="rounded-xl bg-white p-2.5 text-[11px] font-semibold text-violet-800">
-                  Passez Pro pour créer des groupes personnalisés, inviter des membres et filtrer leur calendrier.
-                </p>
+                <div className="space-y-2 rounded-xl bg-white p-2.5">
+                  <p className="text-[11px] font-semibold text-violet-800">
+                    Passez Pro pour créer des groupes personnalisés, inviter des membres et filtrer leur calendrier.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openPaywallModal('la gestion des groupes')}
+                    className="w-full rounded-xl bg-violet-600 py-2 text-[11px] font-extrabold text-white transition hover:bg-violet-700"
+                  >
+                    Débloquer les groupes Pro
+                  </button>
+                </div>
               ) : (
                 <>
                   <div className="flex gap-2">
@@ -3341,7 +3316,7 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         if (option.premium && !isPro) {
-                          setPaywallFeature(`le thème ${option.label}`);
+                          openPaywallModal(`le thème ${option.label}`);
                           return;
                         }
                         void handleSavePersonalization({ ...personalization, theme: option.value });
@@ -3372,7 +3347,7 @@ export default function App() {
                     const selectedFont = fontOptions.find((option) => option.value === event.target.value);
                     if (!selectedFont) return;
                     if (selectedFont.premium && !isPro) {
-                      setPaywallFeature(`la police ${selectedFont.label}`);
+                      openPaywallModal(`la police ${selectedFont.label}`);
                       return;
                     }
                     void handleSavePersonalization({ ...personalization, font: selectedFont.value });
@@ -3922,52 +3897,43 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal: Code HTML unique prêt à copier-coller */}
-      {isCodeModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white w-full max-w-3xl rounded-3xl p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-lg">
-                  Fichier unique index.html (HTML + Tailwind CDN + Lucide Icons)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Prêt à être copié-collé et exécuté directement dans n&apos;importe quel navigateur
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCodeModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {selectedDayActionDate && (
+        <DayActionModal
+          date={selectedDayActionDate}
+          leaves={leaves.filter((leave) => leave.date === selectedDayActionDate)}
+          isPro={isPro}
+          onClose={() => setSelectedDayActionDate(null)}
+          onRemove={(leaveId) => {
+            setSelectedDayActionDate(null);
+            void handleDeleteLeave(leaveId);
+          }}
+          onWeather={() => {
+            setSelectedDayActionDate(null);
+            setSelectedWeatherDate(selectedDayActionDate);
+          }}
+          onEscape={() => {
+            const date = selectedDayActionDate;
+            setSelectedDayActionDate(null);
+            setSelectedYear(Number(date.slice(0, 4)));
+            setSelectedEscapadeDate(date);
+            setActiveView('optimizer');
+            window.setTimeout(() => {
+              document.getElementById('optimiseur')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 0);
+          }}
+          onUpgrade={(feature) => {
+            setSelectedDayActionDate(null);
+            openPaywallModal(feature);
+          }}
+        />
+      )}
 
-            <div className="my-4 flex-1 overflow-auto bg-slate-950 text-slate-100 rounded-2xl p-4 text-xs font-mono leading-relaxed">
-              <pre className="whitespace-pre-wrap break-words">{STANDALONE_HTML_CODE}</pre>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleDownloadStandaloneHtml}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 transition cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Télécharger index.html</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyStandaloneHtml}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer"
-              >
-                <Copy className="w-4 h-4" />
-                <span>{copiedCode ? 'Copié !' : 'Copier tout le code'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {selectedWeatherDate && (
+        <DayWeatherModal
+          date={selectedWeatherDate}
+          forecast={weatherForecasts[selectedWeatherDate]}
+          onClose={() => setSelectedWeatherDate(null)}
+        />
       )}
 
       <PaywallModal
@@ -3975,17 +3941,6 @@ export default function App() {
         feature={paywallFeature ?? ''}
         onClose={() => setPaywallFeature(null)}
         onTestUpgrade={import.meta.env.DEV ? () => void handleSetProStatus(true) : undefined}
-      />
-
-      <ExportCalendarModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        isPro={isPro}
-        leaves={leaves}
-        year={selectedYear}
-        user={user}
-        onUpgrade={() => void handleSetProStatus(true)}
-        quotas={{ cp: quotas.cp, rtt: quotas.rtt }}
       />
 
       {user && !hasCompletedOnboarding && (

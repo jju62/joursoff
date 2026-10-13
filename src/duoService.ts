@@ -20,10 +20,16 @@ export type PartnerCalendar = {
   partnerName: string;
   partnerAvatar: string;
   leaves: SharedLeave[];
+  cpBalance: number;
+  rttBalance: number;
 };
 
 function throwOnError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export async function getDuoRelationship(): Promise<DuoRelationship | null> {
@@ -47,14 +53,45 @@ export async function acceptDuoInvitation(code: string): Promise<void> {
 export async function getPartnerCalendar(): Promise<PartnerCalendar> {
   const { data, error } = await supabase.rpc('get_linked_user_calendar');
   throwOnError(error);
-  if (!data || typeof data !== 'object') {
+  if (!isRecord(data)) {
     throw new Error('Les données du calendrier partagé sont invalides.');
   }
-  const result = data as PartnerCalendar;
+  if (
+    typeof data.partnerName !== 'string' ||
+    typeof data.partnerAvatar !== 'string' ||
+    typeof data.cpBalance !== 'number' ||
+    !Number.isFinite(data.cpBalance) ||
+    typeof data.rttBalance !== 'number' ||
+    !Number.isFinite(data.rttBalance) ||
+    !Array.isArray(data.leaves)
+  ) {
+    throw new Error('Les données du calendrier partagé sont incomplètes.');
+  }
+  const leaves = data.leaves.map((item: unknown): SharedLeave => {
+    if (
+      !isRecord(item) ||
+      typeof item.date !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(item.date) ||
+      (item.type !== 'CP' && item.type !== 'RTT') ||
+      typeof item.days !== 'number' ||
+      !Number.isFinite(item.days) ||
+      (item.halfDay !== undefined && item.halfDay !== null && item.halfDay !== 'morning' && item.halfDay !== 'afternoon')
+    ) {
+      throw new Error('Un congé partagé reçu est invalide.');
+    }
+    return {
+      date: item.date,
+      type: item.type,
+      days: item.days,
+      ...(item.halfDay ? { halfDay: item.halfDay } : {}),
+    };
+  });
   return {
-    partnerName: result.partnerName,
-    partnerAvatar: result.partnerAvatar,
-    leaves: Array.isArray(result.leaves) ? result.leaves : [],
+    partnerName: data.partnerName,
+    partnerAvatar: data.partnerAvatar,
+    leaves,
+    cpBalance: data.cpBalance,
+    rttBalance: data.rttBalance,
   };
 }
 

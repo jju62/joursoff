@@ -30,8 +30,12 @@ Apply [`supabase/migrations/20261009150000_congeszen_invitation_codes.sql`](./su
 to issue new Duo invitations with the `ZEN-` prefix and group invitations with `ZEN-GRP-`.
 Previously issued invitation codes remain valid.
 
-The shared-calendar RPC returns only leave dates, leave types, and half-day periods; it
-does not return leave labels, account email addresses, or CP/RTT balances.
+The shared-calendar RPC returns leave dates, leave types, half-day periods, and the
+partner's remaining CP/RTT balances for Pro Duo users. It does not return leave labels
+or account email addresses. Apply
+[`supabase/migrations/20261013130000_premium_duo_balances.sql`](./supabase/migrations/20261013130000_premium_duo_balances.sql)
+to require Pro for shared calendar data and calculate these balances without exposing
+the partner's saved quota settings.
 
 ## Plannings de groupe
 
@@ -42,14 +46,9 @@ avec un code réutilisable et filtrer les membres visibles dans le calendrier. L
 calendriers de groupe distinguent les membres sur les jours concernés et permettent
 d’afficher tout le monde, personne ou une sélection. Ils restent en lecture seule et
 ne transmettent ni libellés, ni adresses email, ni soldes de congés.
-
-## Publicités
-
-Pour activer les bannières Google AdSense en production, renseignez
-`VITE_ADSENSE_CLIENT` (identifiant éditeur `ca-pub-…`) et `VITE_ADSENSE_SLOT`
-(identifiant de l’emplacement) dans l’environnement de build. Sans ces deux valeurs,
-aucun script publicitaire n’est chargé. En développement, une bannière de test et un
-basculeur Gratuit/Pro sont disponibles dans les paramètres du profil.
+Appliquez également
+[`supabase/migrations/20261013140000_enforce_premium_shared_access.sql`](./supabase/migrations/20261013140000_enforce_premium_shared_access.sql)
+pour faire appliquer la restriction Pro aux RPC et aux écritures Supabase.
 
 Le compte gratuit reçoit les prévisions jusqu’à J+3 et une idée générique d’escapade.
 Le compte Pro reçoit les prévisions jusqu’à J+7, trois suggestions filtrables illustrées
@@ -60,9 +59,12 @@ d’escapade du formulaire de congé reste replié par défaut ; les marchés de
 Strasbourg et Colmar ont une illustration hivernale dédiée.
 Les thèmes Indigo et Émeraude sont gratuits ; OLED, Pastel et Saisonnier sont réservés
 à Pro.
-Le partage Duo est gratuit : la vue superposée différencie les congés de chaque personne
-et permet de masquer ou d’afficher ceux du partenaire, sans affecter l’édition de son
-propre calendrier. Les groupes de plus de deux personnes sont réservés à Pro.
+Le partage et le mode Duo sont réservés à Pro. La vue superposée différencie les congés,
+affiche les soldes CP/RTT des deux personnes et permet de masquer ou d’afficher les
+congés du partenaire, sans affecter l’édition de son propre calendrier. La gestion des
+groupes est également réservée à Pro. L’offre Pro est présentée à 4,99 € en paiement
+unique pour un accès à vie, sans abonnement ; Duo permet de coordonner deux calendriers
+et les groupes facilitent l’organisation avec plusieurs personnes.
 
 ## Statut Pro
 
@@ -114,4 +116,4 @@ après la migration des profils. Elle ajoute l’état et les préférences de c
 utilisateur connecté enregistre sa configuration sans droit de mise à jour directe de
 son profil. À sa première connexion, l’application demande la ville de départ, la zone
 scolaire et les paramètres de congés payés et RTT ; elle affiche ensuite une visite
-guidée du calendrier, de l’optimiseur, des partages et des exports.
+guidée du calendrier, de l’optimiseur et des partages.

@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Crown, X } from 'lucide-react';
 
 type AppTourProps = {
   onStepChange: (step: number) => void;
   onComplete: () => Promise<void>;
 };
 
-const TOUR_STEPS = [
+const TOUR_STEPS: {
+  target: string;
+  title: string;
+  description: string;
+  premiumOffer?: boolean;
+}[] = [
   {
     target: '[data-tour="calendar"]',
     title: '📅 Votre calendrier et vos soldes',
@@ -20,12 +25,8 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="sharing"]',
     title: '👥 Duo et groupes',
-    description: 'Depuis votre compte, créez un partage Duo ou rejoignez un groupe pour mieux coordonner vos prochaines vacances.',
-  },
-  {
-    target: '[data-tour="export"]',
-    title: '🎨 Export et personnalisation',
-    description: 'Exportez vers Google Calendar ou en PDF. Dans votre compte, choisissez aussi votre thème et votre avatar.',
+    description: 'Partagez votre calendrier de congés avec votre partenaire en Duo, ou réunissez famille, amis et collègues dans un Groupe. Visualisez les disponibilités de chacun, repérez les dates qui conviennent à tous et organisez vos vacances sans échanges interminables. Les plannings se consultent ensemble, tout en gardant vos informations personnelles privées.',
+    premiumOffer: true,
   },
 ];
 
@@ -107,7 +108,10 @@ export function AppTour({ onStepChange, onComplete }: AppTourProps) {
 
   const current = TOUR_STEPS[step];
   const popoverTop = spotlight
-    ? Math.min(Math.max(spotlight.top + spotlight.height + 14, 16), window.innerHeight - 250)
+    ? Math.max(16, Math.min(
+      Math.max(spotlight.top + spotlight.height + 14, 16),
+      window.innerHeight - (current.premiumOffer ? 390 : 250)
+    ))
     : Math.max(24, Math.round(window.innerHeight / 2 - 120));
 
   return (
@@ -153,7 +157,7 @@ export function AppTour({ onStepChange, onComplete }: AppTourProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-title"
-        className="absolute left-1/2 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-white/80 bg-white p-5 shadow-2xl shadow-slate-950/30 transition-[top] duration-300 sm:p-6"
+        className="absolute left-1/2 max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 overflow-y-auto rounded-2xl border border-white/80 bg-white p-5 shadow-2xl shadow-slate-950/30 transition-[top] duration-300 sm:p-6"
         style={{ top: popoverTop }}
       >
         <div className="flex items-center justify-between gap-3">
@@ -172,6 +176,14 @@ export function AppTour({ onStepChange, onComplete }: AppTourProps) {
         </div>
         <h2 id="tour-title" className="mt-4 text-lg font-black text-slate-900">{current.title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{current.description}</p>
+        {current.premiumOffer && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <Crown className="h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-xs font-bold leading-relaxed text-amber-950">
+              Fonctionnalité Pro : paiement unique de 4,99 €, accès à vie, sans abonnement.
+            </p>
+          </div>
+        )}
         {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-2.5 text-xs font-semibold text-red-700">{error}</p>}
         <div className="mt-5 flex items-center justify-between gap-2">
           {step > 0 ? (
