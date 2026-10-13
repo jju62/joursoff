@@ -91,6 +91,42 @@ const STORAGE_KEY = 'joursoff_data';
 const QUOTA_STORAGE_KEY = 'joursoff_quotas_2026';
 const PERSONALIZATION_STORAGE_KEY = 'joursoff_personalization';
 const PROFILE_STORAGE_KEY = 'joursoff_profile';
+const CALENDAR_VIEW_STORAGE_KEY = 'joursoff_calendar_view';
+
+type CalendarViewMode = 'mine' | 'partner' | 'duo' | 'group';
+
+type StoredCalendarView = {
+  mode: CalendarViewMode;
+  selectedGroupId: string;
+  showPartnerInDuo: boolean;
+};
+
+const DEFAULT_CALENDAR_VIEW: StoredCalendarView = {
+  mode: 'mine',
+  selectedGroupId: '',
+  showPartnerInDuo: true,
+};
+
+function isCalendarViewMode(value: unknown): value is CalendarViewMode {
+  return value === 'mine' || value === 'partner' || value === 'duo' || value === 'group';
+}
+
+function readStoredCalendarView(): StoredCalendarView {
+  try {
+    const raw = localStorage.getItem(CALENDAR_VIEW_STORAGE_KEY);
+    if (!raw) return DEFAULT_CALENDAR_VIEW;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return DEFAULT_CALENDAR_VIEW;
+    const candidate = parsed as Record<string, unknown>;
+    return {
+      mode: isCalendarViewMode(candidate.mode) ? candidate.mode : DEFAULT_CALENDAR_VIEW.mode,
+      selectedGroupId: typeof candidate.selectedGroupId === 'string' ? candidate.selectedGroupId : '',
+      showPartnerInDuo: typeof candidate.showPartnerInDuo === 'boolean' ? candidate.showPartnerInDuo : true,
+    };
+  } catch {
+    return DEFAULT_CALENDAR_VIEW;
+  }
+}
 
 type UserProfile = {
   name: string;
@@ -230,7 +266,7 @@ export default function App() {
   const [partnerCalendar, setPartnerCalendar] = useState<PartnerCalendar | null>(null);
   const [calendarGroups, setCalendarGroups] = useState<CalendarGroup[]>([]);
   const [groupCalendar, setGroupCalendar] = useState<GroupCalendar | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState(() => readStoredCalendarView().selectedGroupId);
   const [visibleGroupMembers, setVisibleGroupMembers] = useState<Record<string, boolean>>({});
   const [groupNameInput, setGroupNameInput] = useState('');
   const [groupInviteInput, setGroupInviteInput] = useState('');
@@ -240,8 +276,8 @@ export default function App() {
   const [duoInviteInput, setDuoInviteInput] = useState('');
   const [duoBusy, setDuoBusy] = useState(false);
   const [duoError, setDuoError] = useState<string | null>(null);
-  const [calendarViewMode, setCalendarViewMode] = useState<'mine' | 'partner' | 'duo' | 'group'>('mine');
-  const [showPartnerInDuo, setShowPartnerInDuo] = useState(true);
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>(() => readStoredCalendarView().mode);
+  const [showPartnerInDuo, setShowPartnerInDuo] = useState(() => readStoredCalendarView().showPartnerInDuo);
   const [weatherByCity, setWeatherByCity] = useState<Record<string, DailyWeather[]>>({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -309,9 +345,11 @@ export default function App() {
     setProfileNameInput(DEFAULT_PROFILE.name);
     setProfileCityInput('');
     setCalendarViewMode('mine');
+    setSelectedGroupId('');
+    setShowPartnerInDuo(true);
     setDuoRelationship(null);
     setPartnerCalendar(null);
-    for (const key of [STORAGE_KEY, QUOTA_STORAGE_KEY, PERSONALIZATION_STORAGE_KEY, PROFILE_STORAGE_KEY]) {
+    for (const key of [STORAGE_KEY, QUOTA_STORAGE_KEY, PERSONALIZATION_STORAGE_KEY, PROFILE_STORAGE_KEY, CALENDAR_VIEW_STORAGE_KEY]) {
       localStorage.removeItem(key);
     }
   }, []);
@@ -374,6 +412,15 @@ export default function App() {
     if (!user || settingsLoadedForUser !== user.id) return;
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
   }, [profile, settingsLoadedForUser, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, JSON.stringify({
+      mode: calendarViewMode,
+      selectedGroupId,
+      showPartnerInDuo,
+    } satisfies StoredCalendarView));
+  }, [calendarViewMode, selectedGroupId, showPartnerInDuo, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -507,6 +554,7 @@ export default function App() {
           });
         } else {
           setPartnerCalendar(null);
+          setCalendarViewMode((mode) => (mode === 'duo' || mode === 'partner' ? 'mine' : mode));
         }
         setDuoError(null);
       } catch (error) {
@@ -521,6 +569,7 @@ export default function App() {
   }, [isPro, user]);
 
   useEffect(() => {
+    if (authInitializing) return;
     if (!user) {
       setCalendarGroups([]);
       setGroupCalendar(null);
@@ -1759,7 +1808,7 @@ export default function App() {
                             } else if (option.id === 'duo' && !partnerCalendar) {
                               openProfileSettings();
                             } else {
-                              setCalendarViewMode(option.id as 'mine' | 'partner' | 'duo');
+                              setCalendarViewMode(option.id as CalendarViewMode);
                             }
                           }}
                           className={`flex min-h-10 shrink-0 snap-start items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-bold transition ${
