@@ -601,6 +601,7 @@ export default function App() {
   }, [isPro, user]);
 
   useEffect(() => {
+    if (authInitializing) return;
     if (!isPro && (calendarViewMode === 'group' || calendarViewMode === 'duo' || calendarViewMode === 'partner')) {
       setCalendarViewMode('mine');
       setGroupCalendar(null);
@@ -628,7 +629,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [calendarViewMode, isPro, selectedGroupId]);
+  }, [authInitializing, calendarViewMode, isPro, selectedGroupId]);
 
   useEffect(() => {
     if (authInitializing || !user || settingsLoadedForUser !== user.id) return;
