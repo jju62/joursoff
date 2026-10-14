@@ -15,6 +15,7 @@ type AuthContextValue = {
   user: User | null;
   isPro: boolean;
   setIsPro: (value: boolean) => Promise<void>;
+  activateProWithPurchase: (purchaseToken: string, productId: string) => Promise<void>;
   hasCompletedOnboarding: boolean;
   completeOnboarding: (data: OnboardingData) => Promise<void>;
   loading: boolean;
@@ -124,6 +125,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [isPro, updateIsPro, user]);
 
+  const activateProWithPurchase = useCallback(async (purchaseToken: string, productId: string) => {
+    if (!user) throw new Error('Connectez-vous pour activer votre achat Pro.');
+
+    const requestGeneration = generation.current;
+    const { data, error } = await supabase.functions.invoke<{ isPro?: unknown }>(
+      'verify-google-play-purchase',
+      { body: { purchaseToken, productId } },
+    );
+    if (error) throw error;
+    if (data?.isPro !== true) {
+      throw new Error('Google Play n’a pas confirmé l’activation de CongésZen Pro.');
+    }
+    if (generation.current !== requestGeneration) {
+      throw new Error('La session a changé pendant la vérification de l’achat. Reconnectez-vous.');
+    }
+
+    updateIsPro(true);
+  }, [updateIsPro, user]);
+
   const completeOnboarding = useCallback(async (data: OnboardingData) => {
     if (!user) throw new Error('Connectez-vous pour enregistrer votre configuration.');
 
@@ -150,7 +170,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, isPro, setIsPro, hasCompletedOnboarding, completeOnboarding, loading }}>
+    <AuthContext.Provider value={{ user, isPro, setIsPro, activateProWithPurchase, hasCompletedOnboarding, completeOnboarding, loading }}>
       {children}
     </AuthContext.Provider>
   );

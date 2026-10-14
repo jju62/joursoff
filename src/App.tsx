@@ -3991,7 +3991,11 @@ export default function App() {
         isOpen={paywallFeature !== null}
         feature={paywallFeature ?? ''}
         onClose={() => setPaywallFeature(null)}
-        onTestUpgrade={import.meta.env.DEV ? () => void handleSetProStatus(true) : undefined}
+        onSignIn={() => {
+          setPaywallFeature(null);
+          setIsAuthModalOpen(true);
+        }}
+        onActivated={() => showToast('Paiement confirmé : CongésZen Pro est activé.')}
       />
 
       {user && !hasCompletedOnboarding && (

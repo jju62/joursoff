@@ -1,1 +1,4 @@
 # No notification Edge Functions are configured for V1.
+
+[functions.verify-google-play-purchase]
+verify_jwt = true

@@ -79,6 +79,44 @@ la connexion. En développement, le basculeur Gratuit/Pro enregistre sa valeur e
 base via la RPC `set_my_pro_test_status`. Les clients ne peuvent pas écrire
 directement `profiles.is_pro`; le basculeur n’est pas disponible en production.
 
+## Paiement Google Play Pro
+
+La modal Pro utilise l’API Digital Goods dans l’application Android TWA, puis envoie
+le jeton d’achat à l’Edge Function `verify-google-play-purchase`. Cette fonction
+vérifie l’achat avec l’API Google Play Developer, lie le jeton (sous forme de hash) au
+compte Supabase, accuse réception de l’achat et active `profiles.is_pro` avec la clé
+de service. Le navigateur ne peut donc pas s’accorder lui-même l’accès Pro.
+
+Pour activer le parcours en production :
+
+1. Dans Google Play Console, créez et activez le produit géré à achat unique
+   `congeszen_pro_lifetime` (ou remplacez cet identifiant dans la configuration).
+   Assurez-vous que l’application Android est liée au même projet Google Cloud.
+2. Créez un compte de service autorisé à consulter et gérer les achats dans
+   Google Play Console et téléchargez son JSON de clé privée.
+3. Définissez les secrets de l’Edge Function et déployez-la :
+
+   ```sh
+   supabase secrets set \
+     GOOGLE_PLAY_PACKAGE_NAME="identifiant.package.android" \
+     GOOGLE_PLAY_PRODUCT_ID="congeszen_pro_lifetime" \
+     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{"client_email":"...","private_key":"..."}'
+   supabase functions deploy verify-google-play-purchase
+   ```
+
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` sont fournis
+   par l’environnement Supabase de la fonction. Ne placez jamais la clé du compte
+   de service ni la clé `service_role` dans le client.
+4. Appliquez [`supabase/migrations/20261014110000_google_play_purchases.sql`](./supabase/migrations/20261014110000_google_play_purchases.sql)
+   à la base Supabase.
+5. Configurez l’identifiant public du produit avant de construire le client, par
+   exemple `VITE_GOOGLE_PLAY_PRODUCT_ID=congeszen_pro_lifetime`. Il doit correspondre
+   à `GOOGLE_PLAY_PRODUCT_ID` côté fonction.
+
+En dehors de l’application Android TWA, aucun paiement Stripe n’est configuré :
+la modal indique à l’utilisateur d’effectuer l’achat dans l’application Play Store.
+L’achat exige une session Supabase active.
+
 La migration [`supabase/migrations/20261007120000_grant_pro_test_access.sql`](./supabase/migrations/20261007120000_grant_pro_test_access.sql)
 ajoute la RPC `grant_pro_test_access` et une allowlist privée
 `public.pro_test_access_admins`. Après application, un administrateur doit ajouter
