@@ -530,6 +530,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (authInitializing) return;
     if (!user || !isPro) {
       setDuoRelationship(null);
       setPartnerCalendar(null);
@@ -566,7 +567,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [isPro, user]);
+  }, [authInitializing, isPro, user]);
 
   useEffect(() => {
     if (authInitializing) return;
