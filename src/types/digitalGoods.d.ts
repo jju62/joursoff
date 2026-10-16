@@ -9,6 +9,5 @@ declare global {
 
   interface DigitalGoodsService {
     getDetails: (itemIds: string[]) => Promise<Array<{ itemId: string }>>;
-    makePurchase: (options: { sku: string }) => Promise<{ purchaseToken?: string }>;
   }
 }

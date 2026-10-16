@@ -38,6 +38,8 @@ export function PaywallModal({ isOpen, feature, onClose, onSignIn, onActivated }
     }
 
     setPurchasePending(true);
+    let paymentResponse: PaymentResponse | undefined;
+    let paymentCompletionAttempted = false;
     try {
       const service = await window.getDigitalGoodsService('https://play.google.com/billing');
       const [product] = await service.getDetails([GOOGLE_PLAY_PRODUCT_ID]);
@@ -45,15 +47,40 @@ export function PaywallModal({ isOpen, feature, onClose, onSignIn, onActivated }
         throw new Error('L’offre CongésZen Pro est introuvable dans Google Play.');
       }
 
-      const purchaseResult = await service.makePurchase({ sku: GOOGLE_PLAY_PRODUCT_ID });
-      if (!purchaseResult.purchaseToken) {
+      const paymentRequest = new PaymentRequest(
+        [{
+          supportedMethods: 'https://play.google.com/billing',
+          data: { sku: GOOGLE_PLAY_PRODUCT_ID },
+        }],
+        {
+          total: { label: 'Total', amount: { currency: 'EUR', value: '4.99' } },
+        },
+      );
+      paymentResponse = await paymentRequest.show();
+
+      const details: unknown = paymentResponse.details;
+      const purchaseToken =
+        typeof details === 'object' && details !== null && 'token' in details
+          ? details.token
+          : undefined;
+      if (typeof purchaseToken !== 'string' || purchaseToken.length === 0) {
         throw new Error('Google Play n’a pas renvoyé de jeton de paiement.');
       }
 
-      await activateProWithPurchase(purchaseResult.purchaseToken, GOOGLE_PLAY_PRODUCT_ID);
+      await activateProWithPurchase(purchaseToken, GOOGLE_PLAY_PRODUCT_ID);
+      paymentCompletionAttempted = true;
+      await paymentResponse.complete('success');
       onActivated();
       onClose();
     } catch (error) {
+      if (paymentResponse && !paymentCompletionAttempted) {
+        paymentCompletionAttempted = true;
+        try {
+          await paymentResponse.complete('fail');
+        } catch (completionError) {
+          console.error('Impossible de finaliser la réponse de paiement :', completionError);
+        }
+      }
       if (error instanceof DOMException && error.name === 'AbortError') {
         setPurchaseMessage('Achat annulé. Aucun paiement n’a été effectué.');
       } else {
