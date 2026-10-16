@@ -1,5 +1,8 @@
 [{
-      "relation": ["delegate_permission/common.handle_all_urls"],
+      "relation": [
+        "delegate_permission/common.handle_all_urls",
+        "https://play.google.com/billing"
+      ],
       "target": {
         "namespace": "android_app",
         "package_name": "app.congeszen.twa",
